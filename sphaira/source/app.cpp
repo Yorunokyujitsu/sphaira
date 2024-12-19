@@ -1046,6 +1046,19 @@ App::~App() {
         } else {
             log_write("success with copying over root file!\n");
         }
+    } else if (!App::GetReplaceHbmenuEnable()) {
+        fs::FsNativeSd fs;
+
+        Result rc = fs.DeleteFile("/hbmenu.nro");
+
+        rc = fs.copy_entire_file("/hbmenu.nro", "/switch/hbmenu.nro", true);
+        if (R_FAILED(rc)) {
+            log_write("hbmenu exchange failed\n");
+        } else {
+            log_write("hbmenu exchange successful\n");
+        }
+
+        rc = fs.DeleteFile("/switch/hbmenu.nro");
     } else if (IsHbmenu()) {
         // check we have a version that's newer than current.
         fs::FsNativeSd fs;
