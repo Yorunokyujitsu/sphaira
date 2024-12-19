@@ -34,9 +34,9 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
 
     const auto _time = time(NULL);
     struct tm tm{};
-    const auto gmt = gmtime(&_time);
-    if (gmt) {
-        tm = *gmt;
+    const auto local_tm = localtime(&_time);
+    if (local_tm) {
+        tm = *local_tm;
     }
 
     // todo: app thread poll every 1s and this query the result
