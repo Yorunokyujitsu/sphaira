@@ -1151,6 +1151,18 @@ App::App(const char* argv0) {
         theme_path = m_theme_meta_entries[randomGet64() % m_theme_meta_entries.size()].ini_path;
     } else {
         ini_gets("config", "theme", "romfs:/themes/abyss_theme.ini", theme_path, sizeof(theme_path), CONFIG_PATH);
+
+        /* If the selected theme has been deleted or can't be found, restore it to the default theme. */
+        bool theme_exists = false;
+        for (const auto& entry : m_theme_meta_entries) {
+            if (entry.ini_path == theme_path) {
+                theme_exists = true;
+                break;
+            }
+        }
+        if (!theme_exists) {
+            theme_path = "romfs:/themes/abyss_theme.ini";
+        }
     }
     LoadTheme(theme_path);
 
