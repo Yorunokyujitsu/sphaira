@@ -83,7 +83,7 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
     mutexUnlock(&m_mutex);
 
     gfx::dimBackground(vg);
-    gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);
+    gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_BOXES].colour);
 
     // The pop up shape.
     // const Vec4 box = { 255, 145, 770, 430 };
@@ -97,15 +97,15 @@ auto ProgressBox::Draw(NVGcontext* vg, Theme* theme) -> void {
         const u32 percentage = ((double)offset / (double)size) * 100.0;
         gfx::drawRect(vg, prog_bar.x, prog_bar.y, ((float)offset / (float)size) * prog_bar.w, prog_bar.h, gfx::Colour::CYAN);
         // gfx::drawTextArgs(vg, prog_bar.x + 85, prog_bar.y + 40, 20, 0, gfx::Colour::WHITE, "%u%%", percentage);
-        gfx::drawTextArgs(vg, prog_bar.x + prog_bar.w + 10, prog_bar.y, 20, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, gfx::Colour::WHITE, "%u%%", percentage);
+        gfx::drawTextArgs(vg, prog_bar.x + prog_bar.w + 10, prog_bar.y, 20, NVG_ALIGN_LEFT | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT_LIGHT].colour, "%u%%", percentage);
     }
 
-    gfx::drawTextArgs(vg, center_x, m_pos.y + 60, 25, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::WHITE, title.c_str());
+    gfx::drawTextArgs(vg, center_x, m_pos.y + 60, 25, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, theme->elements[ThemeEntryID_TEXT].colour, title.c_str());
     // gfx::drawTextArgs(vg, center_x, 260, 20, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::SILVER, "Please do not remove the gamecard or");
     // gfx::drawTextArgs(vg, center_x, 295, 20, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::SILVER, "power off the system whilst installing.");
     // gfx::drawTextArgs(vg, center_x, 360, 20, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::WHITE, "%.2f MiB/s", 24.0);
     if (!transfer.empty()) {
-        gfx::drawTextArgs(vg, center_x, prog_bar.y - 15 - 20 * 1.5, 20, NVG_ALIGN_CENTER, gfx::Colour::WHITE, "%s", transfer.c_str());
+        gfx::drawTextArgs(vg, center_x, prog_bar.y - 15 - 20 * 1.5, 20, NVG_ALIGN_CENTER, theme->elements[ThemeEntryID_TEXT].colour, "%s", transfer.c_str());
     }
 }
 

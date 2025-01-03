@@ -64,7 +64,7 @@ void MenuBase::Draw(NVGcontext* vg, Theme* theme) {
     nvgFontSize(vg, 28);
     gfx::textBounds(vg, 0, 0, bounds, m_title.c_str());
     gfx::drawTextArgs(vg, 80, start_y, 28.f, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
-    gfx::drawTextArgs(vg, 80 + (bounds[2] - bounds[0]) + 10, start_y, 16, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT].colour, m_title_sub_heading.c_str());
+    gfx::drawTextArgs(vg, 80 + (bounds[2] - bounds[0]) + 10, start_y, 16, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM, theme->elements[ThemeEntryID_TEXT_LIGHT].colour, m_title_sub_heading.c_str());
 
     // gfx::drawTextArgs(vg, 80, 65, 28.f, NVG_ALIGN_LEFT, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
     // gfx::drawTextArgs(vg, 80, 680.f, 18, NVG_ALIGN_LEFT, theme->elements[ThemeEntryID_TEXT].colour, "%s", m_sub_heading.c_str());

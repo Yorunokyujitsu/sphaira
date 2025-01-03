@@ -122,7 +122,7 @@ auto PopupList::OnLayoutChange() -> void {
 
 auto PopupList::Draw(NVGcontext* vg, Theme* theme) -> void {
     gfx::dimBackground(vg);
-    gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);
+    gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_BOXES].colour);
     gfx::drawText(vg, m_pos + m_title_pos, 24.f, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
     gfx::drawRect(vg, 30.f, m_line_top, m_line_width, 1.f, theme->elements[ThemeEntryID_TEXT].colour);
     gfx::drawRect(vg, 30.f, m_line_bottom, m_line_width, 1.f, theme->elements[ThemeEntryID_TEXT].colour);

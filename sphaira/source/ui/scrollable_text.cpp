@@ -96,8 +96,8 @@ void ScrollableText::Draw(NVGcontext* vg, Theme* theme) {
         const auto sb_y = m_index;
         // gfx::drawRect(vg, banner_vec.x+banner_vec.w-20, m_y_off_base, 10, scrollbar_size, theme->elements[ThemeEntryID_GRID].colour);
         // gfx::drawRect(vg, banner_vec.x+banner_vec.w-20+2, m_y_off_base + sb_h * sb_y, 10-4, sb_h + (sb_h * in_clip) - 4, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
-        gfx::drawRect(vg, banner_vec.w, m_y_off_base, 10, scrollbar_size, theme->elements[ThemeEntryID_GRID].colour);
-        gfx::drawRect(vg, banner_vec.w+2, m_y_off_base + sb_h * sb_y, 10-4, sb_h + (sb_h * in_clip) - 4, theme->elements[ThemeEntryID_TEXT_SELECTED].colour);
+        gfx::drawRect(vg, banner_vec.w, m_y_off_base, 10, scrollbar_size, theme->elements[ThemeEntryID_SCROLLBAR_BG].colour);
+        gfx::drawRect(vg, banner_vec.w+2, m_y_off_base + sb_h * sb_y, 10-4, sb_h + (sb_h * in_clip) - 4, theme->elements[ThemeEntryID_SCROLLBAR].colour);
     }
 
     nvgSave(vg);

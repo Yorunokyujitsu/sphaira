@@ -1140,7 +1140,7 @@ auto ErrorBox::OnLayoutChange() -> void {
 
 auto ErrorBox::Draw(NVGcontext* vg, Theme* theme) -> void {
     gfx::dimBackground(vg);
-    gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_SELECTED].colour);
+    gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_BOXES].colour);
 
     const Vec4 box = { 455, 470, 365, 65 };
     const auto center_x = m_pos.x + m_pos.w/2;
@@ -1151,7 +1151,7 @@ auto ErrorBox::Draw(NVGcontext* vg, Theme* theme) -> void {
     gfx::drawTextArgs(vg, center_x, 380, 20, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::SILVER, "If this message appears repeatedly, please open an issue."_i18n.c_str());
     gfx::drawTextArgs(vg, center_x, 415, 20, NVG_ALIGN_CENTER | NVG_ALIGN_TOP, gfx::Colour::SILVER, "https://github.com/ITotalJustice/sphaira/issues");
     gfx::drawRectOutline(vg, 4.f, theme->elements[ThemeEntryID_SELECTED_OVERLAY].colour, box, theme->elements[ThemeEntryID_SELECTED].colour);
-    gfx::drawTextArgs(vg, center_x, box.y + box.h/2, 23, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, gfx::Colour::WHITE, "OK"_i18n.c_str());
+    gfx::drawTextArgs(vg, center_x, box.y + box.h/2, 23, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->elements[ThemeEntryID_TEXT_SELECTED].colour, "OK"_i18n.c_str());
 }
 
 } // namespace sphaira::ui
