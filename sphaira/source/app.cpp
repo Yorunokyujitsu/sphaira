@@ -918,12 +918,22 @@ void App::LoadTheme(const fs::FsPath& path) {
                 }
             } else if (key == "grid") {
                 theme.elements[ThemeEntryID_GRID] = app->LoadElement(value);
+            } else if (key == "boxes") {
+                theme.elements[ThemeEntryID_BOXES] = app->LoadElement(value);
+            } else if (key == "sidebar") {
+                theme.elements[ThemeEntryID_SIDEBAR] = app->LoadElement(value);
             } else if (key == "selected") {
                 theme.elements[ThemeEntryID_SELECTED] = app->LoadElement(value);
             } else if (key == "selected_overlay") {
                 theme.elements[ThemeEntryID_SELECTED_OVERLAY] = app->LoadElement(value);
+            } else if (key == "scrollbar") {
+                theme.elements[ThemeEntryID_SCROLLBAR] = app->LoadElement(value);
+            } else if (key == "scrollbar_bg") {
+                theme.elements[ThemeEntryID_SCROLLBAR_BG] = app->LoadElement(value);
             } else if (key == "text") {
                 theme.elements[ThemeEntryID_TEXT] = app->LoadElementColour(value);
+            } else if (key == "text_light") {
+                theme.elements[ThemeEntryID_TEXT_LIGHT] = app->LoadElementColour(value);
             } else if (key == "text_selected") {
                 theme.elements[ThemeEntryID_TEXT_SELECTED] = app->LoadElementColour(value);
             } else if (key == "icon_audio") {

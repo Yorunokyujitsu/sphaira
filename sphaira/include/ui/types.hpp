@@ -165,9 +165,14 @@ enum ThemeEntryID {
     ThemeEntryID_BACKGROUND,
 
     ThemeEntryID_GRID,
+    ThemeEntryID_BOXES,
+    ThemeEntryID_SIDEBAR,
     ThemeEntryID_SELECTED,
     ThemeEntryID_SELECTED_OVERLAY,
+    ThemeEntryID_SCROLLBAR,
+    ThemeEntryID_SCROLLBAR_BG,
     ThemeEntryID_TEXT,
+    ThemeEntryID_TEXT_LIGHT,
     ThemeEntryID_TEXT_SELECTED,
 
     ThemeEntryID_ICON_AUDIO,
