@@ -378,7 +378,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     const auto& text_col = theme->elements[ThemeEntryID_TEXT].colour;
 
     if (m_entries.empty()) {
-        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, text_col, "Empty..."_i18n.c_str());
+        gfx::drawTextArgs(vg, SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f, 36.f, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE, theme->elements[ThemeEntryID_TEXT_LIGHT].colour, "Empty..."_i18n.c_str());
         return;
     }
 
@@ -391,8 +391,8 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
         const auto scrollbar_size = 500.f;
         const auto sb_h = 1.f / (float)entry_total * scrollbar_size;
         const auto sb_y = SCROLL;
-        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, gfx::getColour(gfx::Colour::BLACK));
-        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * (max_entry_display - 1)) - 4, gfx::getColour(gfx::Colour::SILVER));
+        gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, theme->elements[ThemeEntryID_SCROLLBAR_BG].colour);
+        gfx::drawRect(vg, SCREEN_WIDTH - 50+2, 102 + sb_h * sb_y, 10-4, sb_h + (sb_h * (max_entry_display - 1)) - 4, theme->elements[ThemeEntryID_SCROLLBAR].colour);
     }
 
     // constexpr Vec4 line_top{30.f, 86.f, 1220.f, 1.f};

@@ -16,7 +16,7 @@ auto ScrollBar::OnLayoutChange() -> void {
 
 auto ScrollBar::Draw(NVGcontext* vg, Theme* theme) -> void {
     if (m_should_draw) {
-        gfx::drawRect(vg, m_pos, gfx::Colour::RED);
+        gfx::drawRect(vg, m_pos, theme->elements[ThemeEntryID_SCROLLBAR].colour);
     }
 }
 
