@@ -388,7 +388,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
     // only draw scrollbar if needed
     if (entry_total > max_entry_display) {
-        const auto scrollbar_size = 500.f;
+        const auto scrollbar_size = 534.f;
         const auto sb_h = 1.f / (float)entry_total * scrollbar_size;
         const auto sb_y = SCROLL;
         gfx::drawRect(vg, SCREEN_WIDTH - 50, 100, 10, scrollbar_size, theme->elements[ThemeEntryID_SCROLLBAR_BG].colour);
