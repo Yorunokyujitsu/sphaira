@@ -1160,7 +1160,7 @@ App::App(const char* argv0) {
     if (App::GetThemeShuffleEnable() && m_theme_meta_entries.size()) {
         theme_path = m_theme_meta_entries[randomGet64() % m_theme_meta_entries.size()].ini_path;
     } else {
-        ini_gets("config", "theme", "romfs:/themes/abyss_theme.ini", theme_path, sizeof(theme_path), CONFIG_PATH);
+        ini_gets("config", "theme", "romfs:/themes/basic_white_theme.ini", theme_path, sizeof(theme_path), CONFIG_PATH);
 
         /* If the selected theme has been deleted or can't be found, restore it to the default theme. */
         bool theme_exists = false;
@@ -1171,7 +1171,7 @@ App::App(const char* argv0) {
             }
         }
         if (!theme_exists) {
-            theme_path = "romfs:/themes/abyss_theme.ini";
+            theme_path = "romfs:/themes/basic_white_theme.ini";
         }
     }
     LoadTheme(theme_path);
