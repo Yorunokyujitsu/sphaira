@@ -260,7 +260,8 @@ auto DistanceBetweenY(Vec4 va, Vec4 vb) -> Vec4 {
 }
 
 auto Sidebar::Draw(NVGcontext* vg, Theme* theme) -> void {
-    gfx::drawRect(vg, m_pos, nvgRGBA(0, 0, 0, 220));
+    NVGcolor baseColor = nvgTransRGBA(theme->elements[ThemeEntryID_SIDEBAR].colour, 245);
+    gfx::drawRect(vg, m_pos, baseColor);
     gfx::drawText(vg, m_title_pos, m_title_size, theme->elements[ThemeEntryID_TEXT].colour, m_title.c_str());
     if (!m_sub.empty()) {
         gfx::drawTextArgs(vg, m_pos.x + m_pos.w - 30.f, m_title_pos.y + 10.f, 18, NVG_ALIGN_TOP | NVG_ALIGN_RIGHT, theme->elements[ThemeEntryID_TEXT].colour, m_sub.c_str());
