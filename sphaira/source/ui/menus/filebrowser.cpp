@@ -1598,7 +1598,7 @@ void FsView::DisplayOptions() {
                 if (R_SUCCEEDED(rc)) {
                     Scan(m_path);
                 } else {
-                    const auto msg = std::string("Failed to rename file: ") + entry.name;
+                    const auto msg = std::string("Failed to rename file: "_i18n) + entry.name;
                     App::PushErrorBox(rc, msg);
                 }
             }
@@ -1682,7 +1682,7 @@ void FsView::DisplayOptions() {
 
                 options->Add(std::make_shared<SidebarEntryCallback>("Extract to..."_i18n, [this](){
                     std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into", fs::AppendPath(m_path, ""))) && !out.empty()) {
+                    if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
                         UnzipFiles(out);
                     }
                 }));
@@ -1700,7 +1700,7 @@ void FsView::DisplayOptions() {
 
                 options->Add(std::make_shared<SidebarEntryCallback>("Compress to..."_i18n, [this](){
                     std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to extract into", m_path)) && !out.empty()) {
+                    if (R_SUCCEEDED(swkbd::ShowText(out, "Enter the path to the folder to compress into"_i18n.c_str(), m_path)) && !out.empty()) {
                         ZipFiles(out);
                     }
                 }));

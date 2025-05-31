@@ -130,7 +130,7 @@ void Menu::Update(Controller* controller, TouchInfo* touch) {
             App::PushErrorBox(rc, "USB install failed!"_i18n);
 
             if (R_SUCCEEDED(rc)) {
-                App::Notify("Usb install success!"_i18n);
+                App::Notify("USB install success!"_i18n);
                 m_state = State::Done;
                 SetPop();
             } else {
