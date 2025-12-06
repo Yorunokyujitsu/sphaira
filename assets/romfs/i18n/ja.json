@@ -231,6 +231,14 @@
     "オフ: name.xci\n",
     "一部のデバイスではフォルダー名とファイル名が一致しないと正常に動作しない場合があります。"
   ],
+  "Use NACP Title": "NACPファイル名で抽出",
+  "use_nacp_info": [
+  "SphairaはNXTCキャッシュでタイトル名を表示するため、ファイル抽出時に",
+  "非ASCII文字が含まれると \"_\" に置き換わります。\n",
+  "このオプションを有効にすると、NACPから読み取った英語名をフォルダ・ファイル名として使用します。\n",
+  "英語名が存在しない一部のゲームでは、代わりにTitleIDを使用します。\n",
+  "非ASCII言語を使用している場合は、\nオプションの有効化を推奨します。"
+  ],
   "Trim XCI": "XCIをトリム",
   "Removes the unused data at the end of the XCI, making the output smaller.": [
     "XCIファイル末尾の未使用データを\n削除して抽出サイズを削減します。"

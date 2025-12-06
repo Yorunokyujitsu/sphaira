@@ -233,6 +233,13 @@
     "비활성화: name.xci\n",
     "일부 장치에서는 폴더와 파일 이름이\n동일해야만 정상 동작합니다."
   ],
+  "Use NACP Title": "NACP 제목 사용",
+  "use_nacp_info": [
+    "Sphaira는 NXTC 캐시로 제목을 표시하지만, 파일 추출 시 비 ASCII 문자가 포함되어있으면 \"_\"로 변환됩니다.\n",
+    "해당 옵션은 이를 방지하기 위하여 NACP에서 읽어온 영문명을 폴더・파일명으로 사용합니다.\n",
+    "일부 영문명이 없는 게임의 경우 TitleID를 대신 사용합니다.\n",
+    "비 ASCII 언어 사용 시 옵션 사용을 권장합니다."
+  ],
   "Trim XCI": "XCI 트림",
   "Removes the unused data at the end of the XCI, making the output smaller.": [
     "XCI 파일 끝부분의 미사용 데이터를\n제거하여 추출 용량을 줄입니다."

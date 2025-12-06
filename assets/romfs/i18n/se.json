@@ -224,6 +224,13 @@
     "For example, /name.xci/name.xci\n",
     "Some devices only function is the xci folder is named exactly the same as the xci."
   ],
+  "Use NACP Title": "Use NACP Title",
+  "use_nacp_info": [
+    "Sphaira displays titles using the NXTC cache, but non-ASCII characters become underscores when extracting files.",
+    "This option instead uses the English title from control.nacp for file/folder names.\n",
+    "If the English title cannot be retrieved, the TitleID will be used instead.\n",
+    "Recommended when using non-ASCII languages."
+  ],
   "Trim XCI": "",
   "Removes the unused data at the end of the XCI, making the output smaller.": "",
   "Label trimmed XCI": "",

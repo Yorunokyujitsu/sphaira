@@ -224,6 +224,13 @@
     "例如：/名稱.xci/名稱.xci\n",
     "某些裝置僅在 XCI 資料夾名稱與 XCI 檔案名稱完全相同時才能運作。"
   ],
+  "Use NACP Title": "Use NACP Title",
+  "use_nacp_info": [
+    "Sphaira displays titles using the NXTC cache, but non-ASCII characters become underscores when extracting files.",
+    "This option instead uses the English title from control.nacp for file/folder names.\n",
+    "If the English title cannot be retrieved, the TitleID will be used instead.\n",
+    "Recommended when using non-ASCII languages."
+  ],
   "Trim XCI": "裁剪 XCI (瘦身)",
   "Removes the unused data at the end of the XCI, making the output smaller.": "移除 XCI 尾端未使用的資料，讓輸出的檔案更小。",
   "Label trimmed XCI": "標記已裁剪的 XCI",
