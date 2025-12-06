@@ -566,4 +566,108 @@ auto GetContentsPath(u64 app_id) -> fs::FsPath {
     return path;
 }
 
+// Nintendo Switch supported Latin characters > ASCII fallback
+static char NormalizeLatinChar(uint32_t code)
+{
+    switch (code) {
+        // ÀÁÂÃÄÅ / àáâãäå
+        case 0x00C0: case 0x00C1: case 0x00C2: case 0x00C3: case 0x00C4: case 0x00C5: return 'A';
+        case 0x00E0: case 0x00E1: case 0x00E2: case 0x00E3: case 0x00E4: case 0x00E5: return 'a';
+        // Ç / ç
+        case 0x00C7: return 'C';
+        case 0x00E7: return 'c';
+        // ÈÉÊË / èéêë
+        case 0x00C8: case 0x00C9: case 0x00CA: case 0x00CB: return 'E';
+        case 0x00E8: case 0x00E9: case 0x00EA: case 0x00EB: return 'e';
+        // ÌÍÎÏ / ìíîï
+        case 0x00CC: case 0x00CD: case 0x00CE: case 0x00CF: return 'I';
+        case 0x00EC: case 0x00ED: case 0x00EE: case 0x00EF: return 'i';
+        // Ñ / ñ
+        case 0x00D1: return 'N';
+        case 0x00F1: return 'n';
+        // ÒÓÔÕÖŒ / òóôõöœ
+        case 0x00D2: case 0x00D3: case 0x00D4: case 0x00D5: case 0x00D6: case 0x0152: return 'O';
+        case 0x00F2: case 0x00F3: case 0x00F4: case 0x00F5: case 0x00F6: case 0x0153: return 'o';
+        // ÙÚÛÜ / ùúûü
+        case 0x00D9: case 0x00DA: case 0x00DB: case 0x00DC: return 'U';
+        case 0x00F9: case 0x00FA: case 0x00FB: case 0x00FC: return 'u';
+        // Š / š / ß
+        case 0x0160: return 'S';
+        case 0x0161: case 0x00DF: return 's';
+        // Ý / ýÿ
+        case 0x00DD: return 'Y';
+        case 0x00FD: case 0x00FF: return 'y';
+        // Ž / ž
+        case 0x017D: return 'Z';
+        case 0x017E: return 'z';
+    }
+    return 0;
+}
+
+static void ToAscii(const char* src, std::string& out)
+{
+    out.clear();
+    static const char illegal[] = "\\/:*?\"<>|";
+    for (const char* p = src; *p; ) {
+        uint32_t code = 0;
+        int len = decode_utf8(&code, (const uint8_t*)p);
+        if (len < 0) break;
+
+        if (code <= 0x7F) {
+            char c = (char)code;
+            if (c < 0x20 || std::strchr(illegal, c)) {
+            } else {
+                out.push_back(c);
+            }
+        }
+        else if (code <= 0x017F) {
+            char rep = NormalizeLatinChar(code);
+            if (code == 0x00DF) {      // ß > "ss"
+                out.push_back('s');
+                out.push_back('s');
+            } else if (rep) {
+                out.push_back(rep);
+            }
+        }
+        p += len;
+    }
+}
+
+bool GetNameSkipNxtc(u64 app_id, std::string& out)
+{
+    NsApplicationControlData control{};
+    size_t actual;
+    if (R_FAILED(nsGetApplicationControlData(
+            NsApplicationControlSource_Storage,
+            app_id,
+            &control,
+            sizeof(control),
+            &actual)))
+    {
+        return false;
+    }
+
+    const NacpStruct& nacp = control.nacp;
+
+    const int english_slots[3] = { 0, 1, 12 };
+
+    std::string ascii;
+
+    for (int slot : english_slots)
+    {
+        const char* name = nacp.lang[slot].name;
+        if (name[0] == '\0')
+            continue;
+
+        ToAscii(name, ascii);
+
+        if (!ascii.empty()) {
+            out = ascii;
+            return true;
+        }
+    }
+    return false;
+}
+
+
 } // namespace sphaira::title

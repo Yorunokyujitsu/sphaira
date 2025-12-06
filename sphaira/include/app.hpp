@@ -333,6 +333,7 @@ public:
     // dump options
     option::OptionBool m_dump_app_folder{"dump", "app_folder", true};
     option::OptionBool m_dump_append_folder_with_xci{"dump", "append_folder_with_xci", true};
+    option::OptionBool m_dump_use_nacp_name{"dump", "use_nacp_name", false};
     option::OptionBool m_dump_trim_xci{"dump", "trim_xci", false};
     option::OptionBool m_dump_label_trim_xci{"dump", "label_trim_xci", false};
     option::OptionBool m_dump_convert_to_common_ticket{"dump", "convert_to_common_ticket", true};

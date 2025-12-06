@@ -1535,6 +1535,7 @@ App::App(const char* argv0) {
         } else if (!std::strcmp(Section, "dump")) {
             if (app->m_dump_app_folder.LoadFrom(Key, Value)) {}
             else if (app->m_dump_append_folder_with_xci.LoadFrom(Key, Value)) {}
+            else if (app->m_dump_use_nacp_name.LoadFrom(Key, Value)) {}
             else if (app->m_dump_trim_xci.LoadFrom(Key, Value)) {}
             else if (app->m_dump_label_trim_xci.LoadFrom(Key, Value)) {}
             else if (app->m_dump_convert_to_common_ticket.LoadFrom(Key, Value)) {}
@@ -2289,6 +2290,15 @@ void App::DisplayDumpOptions(bool left_side) {
             "XCI dumps will name the folder with the .xci extension.\n"
             "For example, /name.xci/name.xci\n\n"
             "Some devices only function is the xci folder is named exactly the same as the xci."
+        )
+    );
+    options->Add<ui::SidebarEntryBool>(
+        "Use NACP Title"_i18n, App::GetApp()->m_dump_use_nacp_name,
+        i18n::get("use_nacp_info",
+            "Sphaira displays titles using the NXTC cache, but non-ASCII characters become underscores when extracting files.\n"
+            "This option instead uses the English title from control.nacp for file/folder names.\n"
+            "If the English title cannot be retrieved, the TitleID will be used instead.\n\n"
+            "Recommended when using non-ASCII languages."
         )
     );
     options->Add<ui::SidebarEntryBool>(

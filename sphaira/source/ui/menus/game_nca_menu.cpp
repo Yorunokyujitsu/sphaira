@@ -375,8 +375,27 @@ void Menu::DumpNcas() {
     const auto entries = GetSelectedEntries();
     App::PopToMenu();
 
-    fs::FsPath name_buf = m_entry.GetName();
+    fs::FsPath name_buf{};
+    if (App::GetApp()->m_dump_use_nacp_name.Get()) {
+        // NACP
+        std::string nacp_name;
+        if (title::GetNameSkipNxtc(m_entry.app_id, nacp_name)) {
+            std::snprintf(name_buf, sizeof(name_buf), "%s", nacp_name.c_str());
+        } else {
+            // ID fallback
+            std::snprintf(name_buf, sizeof(name_buf), "%016lX", m_entry.app_id);
+        }
+    } else {
+        // NXTC
+        std::snprintf(name_buf, sizeof(name_buf), "%s", m_entry.GetName());
+    }
+
     title::utilsReplaceIllegalCharacters(name_buf, true);
+
+    char id_str[32];
+    std::snprintf(id_str, sizeof(id_str), "%016lX", m_entry.app_id);
+    const bool is_id_fallback = (strcmp(name_buf.s, id_str) == 0);
+    const char* file_prefix = is_id_fallback ? "" : name_buf.s;
 
     char version[sizeof(NacpStruct::display_version) + 1]{};
     if (m_meta_entry.status.meta_type == NcmContentMetaType_Patch) {
@@ -389,7 +408,7 @@ void Menu::DumpNcas() {
         std::snprintf(nca_name, sizeof(nca_name), "%s%s", utils::hexIdToStr(e.content_id).str, e.content_type == NcmContentType_Meta ? ".cnmt.nca" : ".nca");
 
         fs::FsPath path;
-        std::snprintf(path, sizeof(path), "/dumps/NCA/%s %s[%016lX][v%u][%s]/%s", name_buf.s, version, m_meta_entry.status.application_id, m_meta_entry.status.version, ncm::GetMetaTypeShortStr(m_meta_entry.status.meta_type), nca_name);
+        std::snprintf(path, sizeof(path), "/dumps/NCA/%s%s%s[%016lX][v%u][%s]/%s", file_prefix, (file_prefix[0] ? " " : ""), version, m_meta_entry.status.application_id, m_meta_entry.status.version, ncm::GetMetaTypeShortStr(m_meta_entry.status.meta_type), nca_name);
 
         paths.emplace_back(path);
     }

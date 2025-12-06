@@ -126,11 +126,36 @@ auto GetDumpTypeStr(u8 type) -> const char* {
 }
 
 auto BuildXciName(const ApplicationEntry& e) -> fs::FsPath {
-    fs::FsPath name_buf = e.lang_entry.name;
+    fs::FsPath name_buf{};
+    bool is_id_fallback = false;
+
+    if (App::GetApp()->m_dump_use_nacp_name.Get()) {
+        // ASCII-only NACP
+        std::string nacp_name;
+        if (title::GetNameSkipNxtc(e.app_id, nacp_name)) {
+            std::snprintf(name_buf, sizeof(name_buf), "%s", nacp_name.c_str());
+        } else {
+            // ID fallback
+            std::snprintf(name_buf, sizeof(name_buf), "%016lX", e.app_id);
+        }
+    } else {
+        // NXTC
+        std::snprintf(name_buf, sizeof(name_buf), "%s", e.lang_entry.name);
+    }
+
     title::utilsReplaceIllegalCharacters(name_buf, true);
 
-    fs::FsPath path;
-    std::snprintf(path, sizeof(path), "%s [%016lX][v%u]", name_buf.s, e.app_id, e.version);
+    char id_str[32];
+    std::snprintf(id_str, sizeof(id_str), "%016lX", e.app_id);
+    is_id_fallback = (strcmp(name_buf.s, id_str) == 0);
+
+    fs::FsPath path{};
+    if (is_id_fallback) {
+        std::snprintf(path, sizeof(path), "[%016lX][v%u]", e.app_id, e.version);
+    } else {
+        std::snprintf(path, sizeof(path), "%s [%016lX][v%u]", name_buf.s, e.app_id, e.version);
+    }
+
     return path;
 }
 

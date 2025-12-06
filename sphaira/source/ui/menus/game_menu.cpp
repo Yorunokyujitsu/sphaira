@@ -844,16 +844,35 @@ void DeleteMetaEntries(u64 app_id, int image, const std::string& name, const tit
 }
 
 auto BuildNspPath(const Entry& e, const NsApplicationContentMetaStatus& status, bool to_nsz) -> fs::FsPath {
-    fs::FsPath name_buf = e.GetName();
+    fs::FsPath name_buf{};
+    if (App::GetApp()->m_dump_use_nacp_name.Get()) {
+        // ASCII-only NACP
+        std::string nacp_name;
+        if (title::GetNameSkipNxtc(e.app_id, nacp_name)) {
+            std::snprintf(name_buf, sizeof(name_buf), "%s", nacp_name.c_str());
+        } else {
+            //  ID fallback
+            std::snprintf(name_buf, sizeof(name_buf), "%016lX", e.app_id);
+        }
+    } else {
+        // NXTC
+        std::snprintf(name_buf, sizeof(name_buf), "%s", e.GetName());
+    }
+
     title::utilsReplaceIllegalCharacters(name_buf, true);
+
+    char id_str[32];
+    std::snprintf(id_str, sizeof(id_str), "%016lX", e.app_id);
+    const bool is_id_fallback = (strcmp(name_buf.s, id_str) == 0);
+    const char* file_prefix = is_id_fallback ? "" : name_buf.s;
 
     char version[sizeof(NacpStruct::display_version) + 1]{};
     if (status.meta_type == NcmContentMetaType_Patch) {
         u64 program_id;
-        fs::FsPath path;
-        if (R_SUCCEEDED(title::GetControlPathFromStatus(status, &program_id, &path))) {
+        fs::FsPath cpath;
+        if (R_SUCCEEDED(title::GetControlPathFromStatus(status, &program_id, &cpath))) {
             char display_version[0x10];
-            if (R_SUCCEEDED(nca::ParseControl(path, program_id, display_version, sizeof(display_version), nullptr, offsetof(NacpStruct, display_version)))) {
+            if (R_SUCCEEDED(nca::ParseControl(cpath, program_id, display_version, sizeof(display_version), nullptr, offsetof(NacpStruct, display_version)))) {
                 std::snprintf(version, sizeof(version), "%s ", display_version);
             }
         }
@@ -863,9 +882,9 @@ auto BuildNspPath(const Entry& e, const NsApplicationContentMetaStatus& status, 
 
     fs::FsPath path;
     if (App::GetApp()->m_dump_app_folder.Get()) {
-        std::snprintf(path, sizeof(path), "%s/%s %s[%016lX][v%u][%s].%s", name_buf.s, name_buf.s, version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type), ext);
+        std::snprintf(path, sizeof(path), "%s/%s%s%s[%016lX][v%u][%s].%s", name_buf.s, file_prefix, (file_prefix[0] ? " " : ""), version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type), ext);
     } else {
-        std::snprintf(path, sizeof(path), "%s %s[%016lX][v%u][%s].%s", name_buf.s, version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type), ext);
+        std::snprintf(path, sizeof(path), "%s%s%s[%016lX][v%u][%s].%s", file_prefix, (file_prefix[0] ? " " : ""), version, status.application_id, status.version, ncm::GetMetaTypeShortStr(status.meta_type), ext);
     }
 
     return path;

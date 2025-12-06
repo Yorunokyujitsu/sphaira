@@ -77,6 +77,9 @@ Result GetControlPathFromStatus(const NsApplicationContentMetaStatus& status, u6
 // taken from nxdumptool.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 
+// only work exporting.
+bool GetNameSkipNxtc(u64 app_id, std::string& out);
+
 // /atmosphere/contents/xxx
 auto GetContentsPath(u64 app_id) -> fs::FsPath;
 
