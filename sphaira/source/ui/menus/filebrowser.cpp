@@ -1712,7 +1712,7 @@ void FsView::DisplayOptions() {
             const auto& entry = GetEntry();
             const auto name = entry.GetName();
             const auto header = "Set new name"_i18n;
-            if (R_SUCCEEDED(swkbd::ShowText(out, header.c_str(), header.c_str(), name.c_str())) && !out.empty() && out != name) {
+            if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, header.c_str(), header.c_str(), name.c_str())) && !out.empty() && out != name) {
                 App::PopToMenu();
 
                 const auto src_path = GetNewPath(entry);
@@ -1805,7 +1805,7 @@ void FsView::DisplayOptions() {
 
                 options->Add<SidebarEntryCallback>("Extract to..."_i18n, [this](){
                     std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Extract path", "Enter the path to the folder to extract into"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+                    if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, "Extract path", "Enter the path to the folder to extract into"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
                         UnzipFiles(out);
                     }
                 });
@@ -1823,7 +1823,7 @@ void FsView::DisplayOptions() {
 
                 options->Add<SidebarEntryCallback>("Compress to..."_i18n, [this](){
                     std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Compress path", "Enter the path to the folder to compress into"_i18n.c_str(), m_path)) && !out.empty()) {
+                    if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, "Compress path", "Enter the path to the folder to compress into"_i18n.c_str(), m_path)) && !out.empty()) {
                         ZipFiles(out);
                     }
                 });
@@ -1876,7 +1876,7 @@ void FsView::DisplayAdvancedOptions() {
         options->Add<SidebarEntryCallback>("Create File"_i18n, [this](){
             std::string out;
             const auto header = "Set File Name"_i18n;
-            if (R_SUCCEEDED(swkbd::ShowText(out, header.c_str(), header.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+            if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, header.c_str(), header.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
                 App::PopToMenu();
 
                 fs::FsPath full_path;
@@ -1899,7 +1899,7 @@ void FsView::DisplayAdvancedOptions() {
         options->Add<SidebarEntryCallback>("Create Folder"_i18n, [this](){
             std::string out;
             const auto header = "Set Folder Name"_i18n;
-            if (R_SUCCEEDED(swkbd::ShowText(out, header.c_str(), header.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+            if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, header.c_str(), header.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
                 App::PopToMenu();
 
                 fs::FsPath full_path;
