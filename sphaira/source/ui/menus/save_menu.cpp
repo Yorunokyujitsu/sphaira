@@ -309,7 +309,8 @@ auto BuildSaveBasePath(const Entry& e, bool force_id_path = false) -> fs::FsPath
         name = BuildSaveName(e);
     }
 
-    return fs::AppendPath("/dumps/" + GetSaveFolder(e), name);
+    const auto dump_path = App::GetApp()->m_dump_path.Get();
+    return fs::AppendPath(fs::AppendPath(dump_path, GetSaveFolder(e)), name);
 }
 
 void FreeEntry(NVGcontext* vg, Entry& e) {
@@ -776,13 +777,34 @@ void Menu::RestoreSave() {
             return;
         }
 
-        // get saves in /Saves/Name and /Saves/app_id
-        filebrowser::FsDirCollection collections[2]{};
-        for (auto i = 0; i < std::size(collections); i++) {
-            const auto save_path = fs::AppendPath(mount, BuildSaveBasePath(m_entries[m_index], i != 0));
-            filebrowser::FsView::get_collection(fs.get(), save_path, "", collections[i], true, false, false);
-            // reverse as they will be sorted in oldest -> newest.
-            // todo: better impl when both id and normal app folders are used.
+        // Search both the new export name and the pre-change backup locations.
+        const auto& entry = m_entries[m_index];
+        std::vector<fs::FsPath> candidates;
+        const auto add_path = [&](const fs::FsPath& path) {
+            const auto full = fs::AppendPath(mount, path);
+            if (std::find(candidates.begin(), candidates.end(), full) == candidates.end()) {
+                candidates.push_back(full);
+            }
+        };
+        add_path(BuildSaveBasePath(entry));
+        add_path(BuildSaveBasePath(entry, true));
+        fs::FsPath legacy_name = entry.GetName();
+        title::utilsReplaceIllegalCharacters(legacy_name, true);
+        const auto old_root = fs::AppendPath("/dumps", GetSaveFolder(entry));
+        const auto new_root = fs::AppendPath(App::GetApp()->m_dump_path.Get(), GetSaveFolder(entry));
+        if (!legacy_name.empty()) {
+            add_path(fs::AppendPath(new_root, legacy_name));
+            add_path(fs::AppendPath(old_root, legacy_name));
+        }
+        char id[17];
+        const bool system = entry.save_data_type == FsSaveDataType_System || entry.save_data_type == FsSaveDataType_SystemBcat;
+        std::snprintf(id, sizeof(id), "%016lX", system ? entry.system_save_data_id : entry.application_id);
+        add_path(fs::AppendPath(old_root, id));
+        if (!entry.export_name.empty()) add_path(fs::AppendPath(old_root, entry.export_name));
+
+        std::vector<filebrowser::FsDirCollection> collections(candidates.size());
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            filebrowser::FsView::get_collection(fs.get(), candidates[i], "", collections[i], true, false, false);
             std::ranges::reverse(collections[i].files);
         }
 

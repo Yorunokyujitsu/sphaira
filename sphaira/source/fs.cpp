@@ -111,7 +111,7 @@ FsPath AppendPath(const FsPath& root_path, const FsPath& _file_path) {
     }
 
     FsPath path;
-    if (root_path[std::strlen(root_path) - 1] != '/') {
+    if (root_path.empty() || root_path[root_path.size() - 1] != '/') {
         std::snprintf(path, sizeof(path), "%s/%s", root_path.s, file_path);
     } else {
         std::snprintf(path, sizeof(path), "%s%s", root_path.s, file_path);

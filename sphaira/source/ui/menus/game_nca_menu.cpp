@@ -384,6 +384,9 @@ void Menu::DumpNcas() {
         std::snprintf(version, sizeof(version), "%s ", m_meta_entry.nacp.display_version);
     }
 
+    const auto dump_path = App::GetApp()->m_dump_path.Get();
+    const auto nca_base_path = fs::AppendPath(dump_path, "NCA");
+
     std::vector<fs::FsPath> paths;
     for (auto& e : entries) {
         char nca_name[64];
@@ -396,10 +399,8 @@ void Menu::DumpNcas() {
             std::snprintf(folder, sizeof(folder), "%.*s %s[%016lX][v%u][%s]", static_cast<int>(export_name.size()), export_name.data(), version, m_meta_entry.status.application_id, m_meta_entry.status.version, ncm::GetMetaTypeShortStr(m_meta_entry.status.meta_type));
         }
 
-        fs::FsPath path;
-        std::snprintf(path, sizeof(path), "/dumps/NCA/%s/%s", folder.s, nca_name);
-
-        paths.emplace_back(path);
+        const auto folder_path = fs::AppendPath(nca_base_path, folder);
+        paths.emplace_back(fs::AppendPath(folder_path, nca_name));
     }
 
     auto source = std::make_shared<NcaSource>(m_meta.cs, m_entry.image, entries);

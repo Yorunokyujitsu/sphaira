@@ -2044,12 +2044,11 @@ Result BuildNspEntries(Entry& e, u32 flags, std::vector<NspEntry>& out, bool to_
 
 void DumpNsp(const std::vector<NspEntry>& entries, bool to_nsz) {
     std::vector<fs::FsPath> paths;
+    const auto dump_path = App::GetApp()->m_dump_path.Get();
+    const auto base_path = fs::AppendPath(dump_path, to_nsz ? "NSZ" : "NSP");
+
     for (auto& e : entries) {
-        if (to_nsz) {
-            paths.emplace_back(fs::AppendPath("/dumps/NSZ", e.path));
-        } else {
-            paths.emplace_back(fs::AppendPath("/dumps/NSP", e.path));
-        }
+        paths.emplace_back(fs::AppendPath(base_path, e.path));
     }
 
     auto source = std::make_shared<NspSource>(entries);

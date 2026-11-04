@@ -221,7 +221,7 @@ struct FsPathReal {
             s[real++] = str[i];
 
             // check if we have exceeded the path.
-            if (real >= FS_REAL_MAX_LENGTH) {
+            if (real >= FS_REAL_MAX_LENGTH - 1) {
                 break;
             }
         }

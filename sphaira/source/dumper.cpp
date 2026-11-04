@@ -178,7 +178,7 @@ private:
 };
 
 constexpr DumpLocationEntry DUMP_LOCATIONS[]{
-    { DumpLocationType_SdCard, "microSD card (/dumps/)" },
+    { DumpLocationType_SdCard, "microSD card" },
     { DumpLocationType_Usb, "USB export to PC (usb_export.py)" },
     { DumpLocationType_UsbS2S, "USB transfer (Switch 2 Switch)" },
     { DumpLocationType_DevNull, "/dev/null (Speed Test)" },
@@ -513,7 +513,16 @@ void DumpGetLocation(const std::string& title, u32 location_flags, const OnLocat
             if (!custom_transfer || DUMP_LOCATIONS[i].type != DumpLocationType_UsbS2S) {
                 log_write("[dump] got name 2: %s\n", DUMP_LOCATIONS[i].name);
                 dump_entries.emplace_back(DUMP_LOCATIONS[i].type, i);
-                items.emplace_back(i18n::get(DUMP_LOCATIONS[i].name));
+
+                if (DUMP_LOCATIONS[i].type == DumpLocationType_SdCard) {
+                    auto dump_path = App::GetApp()->m_dump_path.Get();
+                    if (!dump_path.empty() && dump_path.back() != '/') {
+                        dump_path += '/';
+                    }
+                    items.emplace_back(i18n::get(DUMP_LOCATIONS[i].name) + " (" + dump_path + ")");
+                } else {
+                    items.emplace_back(i18n::get(DUMP_LOCATIONS[i].name));
+                }
             }
         }
     }
