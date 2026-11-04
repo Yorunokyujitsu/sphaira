@@ -66,6 +66,10 @@ constexpr Vec4 PANEL{30, 90, 375, 555};
 constexpr float PANEL_X = PANEL.x + 20;
 constexpr float PANEL_W = PANEL.w - 40;
 
+std::string GetNandType() {
+    return App::IsEmummc() ? "emuMMC"_i18n : "eMMC"_i18n;
+}
+
 bool LoadControlImage(game::Entry& e, title::ThreadResultData* result) {
     if (!e.image && result && !result->icon.empty()) {
         const auto image = ImageLoadFromMemory(result->icon, ImageFlag_JPEG);
@@ -179,7 +183,7 @@ Menu::Menu(u32 flags) : MenuBase{"Data Management"_i18n, flags} {
             SidebarEntryArray::Items filter_items;
             filter_items.push_back("All"_i18n);
             filter_items.push_back("microSD card"_i18n);
-            filter_items.push_back("System memory"_i18n);
+            filter_items.push_back(GetNandType());
 
             options->Add<SidebarEntryArray>("Sort"_i18n, sort_items, [this](s64& index_out){
                 m_sort.Set(index_out);
@@ -279,7 +283,7 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
     gfx::drawRect(vg, PANEL, theme->GetColour(ThemeEntryID_GRID));
 
     DrawStorageBar(vg, theme, PANEL_X, PANEL.y + 20, PANEL_W, "microSD card"_i18n, m_games_sd, pdata.sd_free, pdata.sd_total);
-    DrawStorageBar(vg, theme, PANEL_X, PANEL.y + 144, PANEL_W, "System memory"_i18n, m_games_nand, pdata.emmc_free, pdata.emmc_total);
+    DrawStorageBar(vg, theme, PANEL_X, PANEL.y + 144, PANEL_W, GetNandType(), m_games_nand, pdata.emmc_free, pdata.emmc_total);
 
     gfx::drawRect(vg, PANEL_X, PANEL.y + 266, PANEL_W, 1.f, theme->GetColour(ThemeEntryID_LINE_SEPARATOR));
 
@@ -340,9 +344,9 @@ void Menu::Draw(NVGcontext* vg, Theme* theme) {
 
         std::string location;
         if (entry.size_sd && entry.size_nand) {
-            location = "SD + System"_i18n;
+            location = "SD"_i18n + " + " + GetNandType();
         } else if (entry.size_nand) {
-            location = "System memory"_i18n;
+            location = GetNandType();
         } else {
             location = "microSD card"_i18n;
         }
@@ -417,7 +421,7 @@ void Menu::DrawDetails(NVGcontext* vg, Theme* theme) {
     gfx::drawRect(vg, PANEL_X, PANEL.y + 478, PANEL_W, 1.f, theme->GetColour(ThemeEntryID_LINE_SEPARATOR));
 
     draw_row(PANEL.y + 490, "microSD card"_i18n, e.size_sd);
-    draw_row(PANEL.y + 516, "System memory"_i18n, e.size_nand);
+    draw_row(PANEL.y + 516, GetNandType(), e.size_nand);
 }
 
 void Menu::SetIndex(s64 index) {
