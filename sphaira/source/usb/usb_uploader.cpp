@@ -37,7 +37,7 @@ using namespace usb::api;
 
 Usb::Usb(u64 transfer_timeout) {
     m_usb = std::make_unique<usb::UsbHs>(INDEX, FILTER, transfer_timeout);
-    m_usb->Init();
+    m_open_result = m_usb->Init();
 }
 
 Usb::~Usb() {
@@ -108,11 +108,11 @@ Result Usb::file_transfer_loop() {
     log_write("reading buffer: %zu\n", m_buf.size());
 
     R_TRY(Read(m_buf.data(), send_header.GetOffset(), m_buf.size(), &bytes_read));
-    const auto crc32 = crc32Calculate(m_buf.data(), m_buf.size());
+    const auto crc32c = crc32cCalculate(m_buf.data(), m_buf.size());
 
     log_write("read the buffer: %zu\n", bytes_read);
-    // respond back with the length of the data and the crc32.
-    R_TRY(SendResult(RESULT_OK, m_buf.size(), crc32));
+    // respond back with the length of the data and the CRC32C expected by the installer.
+    R_TRY(SendResult(RESULT_OK, m_buf.size(), crc32c));
 
     log_write("sent result with crc\n");
 
