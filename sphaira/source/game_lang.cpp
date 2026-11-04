@@ -6,57 +6,80 @@
 #include <minIni.h>
 
 #include <strings.h>
+#include <string>
+#include <vector>
 
 namespace sphaira::game_lang {
 namespace {
 
 constexpr const char* INI_SECTION = "override_config";
 constexpr const char* INI_KEY = "override_language";
+constexpr const char* INI_REGION_KEY = "override_region";
+
+// Do not confuse I/O errors (or a directory) with an absent config file.
+Result FileExists(fs::FsNativeSd& sd, const fs::FsPath& path, bool& exists) {
+    FsDirEntryType type{};
+    const auto rc = sd.GetEntryType(path, &type);
+    exists = false;
+    if (rc == FsError_PathNotFound) R_SUCCEED();
+    R_TRY(rc);
+    R_UNLESS(type == FsDirEntryType_File, Result_FsInvalidType);
+    exists = true;
+    R_SUCCEED();
+}
 
 } // namespace
 
 s64 Get(u64 app_id) {
     const auto path = fs::AppendPath(title::GetContentsPath(app_id), "config.ini");
+    fs::FsNativeSd sd;
+    bool exists{};
+    if (R_FAILED(FileExists(sd, path, exists))) return -1;
+    if (!exists) return 0;
 
     char buf[32]{};
-    if (ini_gets(INI_SECTION, INI_KEY, "", buf, sizeof(buf), path) < 0) {
-        return 0;
-    }
-
-    // empty value or unknown code -> system default.
-    // atmosphere ignores invalid codes too.
+    ini_gets(INI_SECTION, INI_KEY, "", buf, sizeof(buf), path);
     for (size_t i = 0; i < LANGUAGE_COUNT; i++) {
-        if (!strcasecmp(buf, LANGUAGES[i].code)) {
-            return static_cast<s64>(i) + 1;
-        }
+        if (!strcasecmp(buf, LANGUAGES[i].code)) return static_cast<s64>(i) + 1;
     }
-
     return 0;
 }
 
 Result Set(u64 app_id, s64 index) {
     R_UNLESS(index >= 0 && index <= static_cast<s64>(LANGUAGE_COUNT), Result_GameLangBadIndex);
+    if (index) {
+        u32 supported_languages{};
+        R_TRY(title::GetSupportedLanguageFlag(app_id, &supported_languages));
+        R_UNLESS(supported_languages & LANGUAGES[index - 1].supported_language_flag, Result_GameLangUnsupported);
+    }
 
     const auto dir = title::GetContentsPath(app_id);
     const auto path = fs::AppendPath(dir, "config.ini");
+    fs::FsNativeSd sd;
+    bool exists{};
+    R_TRY(FileExists(sd, path, exists));
+    if (!index && !exists) R_SUCCEED();
+    if (index) R_TRY(sd.CreateDirectoryRecursively(dir));
 
-    if (index == 0) {
-        // nothing to remove if the config doesn't exist.
-        if (!fs::FileExists(path)) {
-            R_SUCCEED();
+    // minIni keeps unrelated sections and keys intact.
+    const auto* language = index ? &LANGUAGES[index - 1] : nullptr;
+    R_UNLESS(ini_puts(INI_SECTION, INI_KEY, language ? language->code : nullptr, path), Result_FsStdioFailedToWrite);
+    R_UNLESS(ini_puts(INI_SECTION, INI_REGION_KEY, language ? language->region_code : nullptr, path), Result_FsStdioFailedToWrite);
+
+    if (!index) {
+        // Delete only an empty config or an empty override section.
+        std::vector<u8> data;
+        R_TRY(sd.read_entire_file(path, data));
+        const std::string content{data.begin(), data.end()};
+        const auto first = content.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos ||
+            content.substr(first, content.find_last_not_of(" \t\r\n") - first + 1) == "[override_config]") {
+            R_TRY(sd.DeleteFile(path));
         }
-
-        // passing NULL as value deletes the key.
-        R_UNLESS(ini_puts(INI_SECTION, INI_KEY, NULL, path), Result_FsStdioFailedToWrite);
-        log_write("[GAMELANG] removed language override for %016lX\n", app_id);
-        R_SUCCEED();
     }
 
-    // ensure /atmosphere/contents/<tid>/ exists before writing the config.
-    R_TRY(fs::FsNativeSd().CreateDirectoryRecursively(dir));
-
-    R_UNLESS(ini_puts(INI_SECTION, INI_KEY, LANGUAGES[index - 1].code, path), Result_FsStdioFailedToWrite);
-    log_write("[GAMELANG] set language override for %016lX: %s\n", app_id, LANGUAGES[index - 1].code);
+    log_write("[GAMELANG] saved language/region override for %016lX: %s / %s\n", app_id,
+        language ? language->code : "default", language ? language->region_code : "default");
     R_SUCCEED();
 }
 
