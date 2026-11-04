@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 #include <span>
+#include <string>
 
 namespace sphaira::ui::menu::save {
 
@@ -22,6 +23,7 @@ enum BackupFlag {
 
 struct Entry final : FsSaveDataInfo {
     NacpLanguageEntry lang{};
+    std::string export_name{};
     int image{};
     bool selected{};
     title::NacpLoadStatus status{title::NacpLoadStatus::None};

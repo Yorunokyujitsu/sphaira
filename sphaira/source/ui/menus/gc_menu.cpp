@@ -113,9 +113,7 @@ auto GetDumpTypeStr(u8 type) -> const char* {
 }
 
 auto BuildXciName(const ApplicationEntry& e) -> fs::FsPath {
-    const auto export_name = title::MakeExportTitleName(
-        e.lang_entry.name, e.english_name, App::GetApp()->m_dump_fix_filenames.Get()
-    );
+    const auto export_name = title::ResolveExportName(e.app_id, e.export_name);
 
     fs::FsPath path;
     if (export_name.empty()) {
@@ -126,13 +124,13 @@ auto BuildXciName(const ApplicationEntry& e) -> fs::FsPath {
     return path;
 }
 
-auto BuildXciBasePath(std::span<const ApplicationEntry> entries) -> fs::FsPath {
-    fs::FsPath path;
+auto BuildXciBasePath(std::span<const ApplicationEntry> entries) -> std::string {
+    std::string path;
     for (s64 i = 0; i < std::size(entries); i++) {
         if (i) {
             path += " + ";
         }
-        path += BuildXciName(entries[i]);
+        path += BuildXciName(entries[i]).s;
     }
 
     return path;
@@ -1094,7 +1092,7 @@ Result Menu::LoadControlData(ApplicationEntry& e) {
 
     e.icon = data->icon;
     e.lang_entry = data->lang;
-    e.english_name = title::GetEnglishTitleName(e.app_id);
+    e.export_name = data->export_name;
     R_SUCCEED();
 }
 

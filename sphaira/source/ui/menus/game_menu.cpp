@@ -186,7 +186,7 @@ void LoadResultIntoEntry(Entry& e, title::ThreadResultData* result) {
     if (result) {
         e.status = result->status;
         e.lang = result->lang;
-        e.supported_language_flag = result->supported_language_flag;
+        e.export_name = result->export_name;
     }
 }
 
@@ -1962,7 +1962,7 @@ Result BuildContentEntry(const NsApplicationContentMetaStatus& status, ContentIn
 
 Result BuildNspEntry(const Entry& e, std::string_view export_name, const ContentInfoEntry& info, const keys::Keys& keys, NspEntry& out, bool to_nsz) {
     out.application_name = e.GetName();
-    out.path = BuildNspPath(e, export_name, info.status, to_nsz);
+    out.path = BuildNspPath(e, title::ResolveExportName(e.app_id, export_name), info.status, to_nsz);
     s64 offset{};
 
     for (auto& e : info.content_infos) {
@@ -2015,9 +2015,7 @@ Result BuildNspEntry(const Entry& e, std::string_view export_name, const Content
 Result BuildNspEntries(Entry& e, const title::MetaEntries& meta_entries, std::vector<NspEntry>& out, bool to_nsz) {
     LoadControlEntry(e);
 
-    const auto fix_filenames = App::GetApp()->m_dump_fix_filenames.Get();
-    const auto english_name = fix_filenames ? title::GetEnglishTitleName(e.app_id) : std::string{};
-    const auto export_name = title::MakeExportTitleName(e.GetName(), english_name, fix_filenames);
+    const auto& export_name = e.export_name;
 
     keys::Keys keys;
     R_TRY(keys::parse_keys(keys, true));

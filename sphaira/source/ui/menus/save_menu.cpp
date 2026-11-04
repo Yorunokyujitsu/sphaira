@@ -275,7 +275,7 @@ void LoadResultIntoEntry(Entry& e, title::ThreadResultData* result) {
     if (result) {
         e.status = result->status;
         e.lang = result->lang;
-        e.status = result->status;
+        e.export_name = result->export_name;
     }
 }
 
@@ -294,19 +294,23 @@ void LoadControlEntry(Entry& e, bool force_image_load = false) {
 }
 
 auto BuildSaveName(const Entry& e) -> fs::FsPath {
-    fs::FsPath name_buf = e.GetName();
-    title::utilsReplaceIllegalCharacters(name_buf, true);
-    return name_buf;
+    return title::ResolveExportName(e.application_id, e.export_name);
 }
 
-auto BuildSaveBasePath(const Entry& e, bool force_id_path = false) -> fs::FsPath {
+auto BuildSaveBasePath(const Entry& e, bool force_id_path = false, const fs::FsPath* cached_name = nullptr) -> fs::FsPath {
     fs::FsPath name;
     if (e.save_data_type == FsSaveDataType_System || e.save_data_type == FsSaveDataType_SystemBcat) {
         std::snprintf(name, sizeof(name), "%016lX", e.system_save_data_id);
     } else if (force_id_path || !strcasecmp(e.GetName(), "corrupted")) {
         std::snprintf(name, sizeof(name), "%016lX", e.application_id);
     } else {
-        name = BuildSaveName(e);
+        const auto export_name = cached_name ? *cached_name : BuildSaveName(e);
+        if (export_name.empty()) {
+            std::snprintf(name, sizeof(name), "%016lX", e.application_id);
+        } else {
+            // Different Title IDs can share a regional or translated title.
+            std::snprintf(name, sizeof(name), "%.180s [%016lX]", export_name.s, e.application_id);
+        }
     }
 
     const auto dump_path = App::GetApp()->m_dump_path.Get();
@@ -786,8 +790,19 @@ void Menu::RestoreSave() {
                 candidates.push_back(full);
             }
         };
-        add_path(BuildSaveBasePath(entry));
+        const bool system = entry.save_data_type == FsSaveDataType_System || entry.save_data_type == FsSaveDataType_SystemBcat;
+        // Resolve the name once: a missing regional title may need NACP I/O.
+        fs::FsPath previous_name;
+        if (!system) previous_name = BuildSaveName(entry);
+        add_path(BuildSaveBasePath(entry, false, &previous_name));
         add_path(BuildSaveBasePath(entry, true));
+        // Backward compatibility: backups created before the Title ID suffix.
+        if (!previous_name.empty()) {
+            add_path(fs::AppendPath(
+                fs::AppendPath(App::GetApp()->m_dump_path.Get(), GetSaveFolder(entry)),
+                previous_name
+            ));
+        }
         fs::FsPath legacy_name = entry.GetName();
         title::utilsReplaceIllegalCharacters(legacy_name, true);
         const auto old_root = fs::AppendPath("/dumps", GetSaveFolder(entry));
@@ -797,10 +812,15 @@ void Menu::RestoreSave() {
             add_path(fs::AppendPath(old_root, legacy_name));
         }
         char id[17];
-        const bool system = entry.save_data_type == FsSaveDataType_System || entry.save_data_type == FsSaveDataType_SystemBcat;
         std::snprintf(id, sizeof(id), "%016lX", system ? entry.system_save_data_id : entry.application_id);
         add_path(fs::AppendPath(old_root, id));
-        if (!entry.export_name.empty()) add_path(fs::AppendPath(old_root, entry.export_name));
+        if (!system && !previous_name.empty()) {
+            add_path(fs::AppendPath(old_root, previous_name));
+            // Include backups made before changing the export path.
+            fs::FsPath name;
+            std::snprintf(name, sizeof(name), "%.180s [%016lX]", previous_name.s, entry.application_id);
+            add_path(fs::AppendPath(old_root, name));
+        }
 
         std::vector<filebrowser::FsDirCollection> collections(candidates.size());
         for (size_t i = 0; i < candidates.size(); ++i) {
@@ -1001,6 +1021,14 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
     }
 
     if (meta.has_value()) {
+        // Refuse backups from a different title before resizing or erasing the
+        // destination save. Older archives with no metadata remain supported.
+        const bool system = e.save_data_type == FsSaveDataType_System || e.save_data_type == FsSaveDataType_SystemBcat;
+        if (system ? meta->attr.system_save_data_id != e.system_save_data_id : meta->attr.application_id != e.application_id) {
+            log_write("[SAVE] backup title ID does not match restore target\n");
+            R_THROW(Result_SaveInvalidArchiveLayout);
+        }
+
         // extending to a size that is not larger than the current one fails with FsError_InvalidSize.
         const auto data_size = std::max<s64>(meta->data_size, extra.data_size);
         const auto journal_size = std::max<s64>(meta->journal_size, extra.journal_size);

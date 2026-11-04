@@ -201,7 +201,7 @@ struct ApplicationEntry {
     u8 key_gen{};
     std::vector<u8> icon;
     NacpLanguageEntry lang_entry{};
-    std::string english_name{};
+    std::string export_name{};
 
     std::vector<GcCollections> application{};
     std::vector<GcCollections> patch{};

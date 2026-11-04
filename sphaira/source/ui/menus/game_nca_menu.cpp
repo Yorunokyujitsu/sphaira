@@ -375,9 +375,7 @@ void Menu::DumpNcas() {
     const auto entries = GetSelectedEntries();
     App::PopToMenu();
 
-    const auto fix_filenames = App::GetApp()->m_dump_fix_filenames.Get();
-    const auto english_name = fix_filenames ? title::GetEnglishTitleName(m_entry.app_id) : std::string{};
-    const auto export_name = title::MakeExportTitleName(m_entry.GetName(), english_name, fix_filenames);
+    const auto export_name = title::ResolveExportName(m_entry.app_id, m_entry.export_name);
 
     char version[sizeof(NacpStruct::display_version) + 1]{};
     if (m_meta_entry.status.meta_type == NcmContentMetaType_Patch) {

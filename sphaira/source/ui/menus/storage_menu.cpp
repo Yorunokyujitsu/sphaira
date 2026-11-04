@@ -86,6 +86,7 @@ void LoadResultIntoEntry(game::Entry& e, title::ThreadResultData* result) {
     if (result) {
         e.status = result->status;
         e.lang = result->lang;
+        e.export_name = result->export_name;
     }
 }
 

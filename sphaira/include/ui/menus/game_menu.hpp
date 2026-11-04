@@ -28,6 +28,7 @@ struct Entry {
     u64 app_id{};
     u8 last_event{};
     NacpLanguageEntry lang{};
+    std::string export_name{};
     // NacpStruct::supported_language_flag, 0 = unknown.
     u32 supported_language_flag{};
     int image{};
