@@ -57,9 +57,7 @@ struct NcaSource final : dump::BaseSource {
     }
 
     Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
-        const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path.find(utils::hexIdToStr(e.content_id).str) != path.npos;
-        });
+        const auto it = FindEntry(path);
         R_UNLESS(it != m_entries.end(), Result_GameBadReadForDump);
 
         const auto rc = ncmContentStorageReadContentIdFile(m_cs, buf, size, &it->content_id, off);
@@ -75,9 +73,7 @@ struct NcaSource final : dump::BaseSource {
     }
 
     auto GetName(const std::string& path) const -> std::string {
-        const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path.find(utils::hexIdToStr(e.content_id).str) != path.npos;
-        });
+        const auto it = FindEntry(path);
 
         if (it != m_entries.end()) {
             return utils::hexIdToStr(it->content_id).str;
@@ -87,9 +83,7 @@ struct NcaSource final : dump::BaseSource {
     }
 
     auto GetSize(const std::string& path) const -> s64 {
-        const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path.find(utils::hexIdToStr(e.content_id).str) != path.npos;
-        });
+        const auto it = FindEntry(path);
 
         if (it != m_entries.end()) {
             return it->size;
@@ -103,6 +97,14 @@ struct NcaSource final : dump::BaseSource {
     }
 
 private:
+    auto FindEntry(const std::string& path) const -> std::vector<NcaEntry>::const_iterator {
+        const auto name = std::string_view{path}.substr(path.find_last_of('/') + 1);
+        const auto id = name.substr(0, name.find('.'));
+        return std::ranges::find_if(m_entries, [id](const auto& entry) {
+            return id == utils::hexIdToStr(entry.content_id).str;
+        });
+    }
+
     NcmContentStorage* const m_cs;
     const int m_icon;
     std::vector<NcaEntry> m_entries{};
@@ -384,6 +386,9 @@ void Menu::DumpNcas() {
         std::snprintf(version, sizeof(version), "%s ", m_meta_entry.nacp.display_version);
     }
 
+    const auto dump_path = App::GetApp()->m_dump_path.Get();
+    const auto nca_base_path = fs::AppendPath(dump_path, "NCA");
+
     std::vector<fs::FsPath> paths;
     for (auto& e : entries) {
         char nca_name[64];
@@ -396,10 +401,12 @@ void Menu::DumpNcas() {
             std::snprintf(folder, sizeof(folder), "%.*s %s[%016lX][v%u][%s]", static_cast<int>(export_name.size()), export_name.data(), version, m_meta_entry.status.application_id, m_meta_entry.status.version, ncm::GetMetaTypeShortStr(m_meta_entry.status.meta_type));
         }
 
-        fs::FsPath path;
-        std::snprintf(path, sizeof(path), "/dumps/NCA/%s/%s", folder.s, nca_name);
-
-        paths.emplace_back(path);
+        if (nca_base_path.size() + folder.size() + std::strlen(nca_name) + 2 >= PATH_MAX) {
+            App::PushErrorBox(Result_FsNewPathTooLarge, "Export failed!"_i18n);
+            return;
+        }
+        const auto folder_path = fs::AppendPath(nca_base_path, folder);
+        paths.emplace_back(fs::AppendPath(folder_path, nca_name));
     }
 
     auto source = std::make_shared<NcaSource>(m_meta.cs, m_entry.image, entries);

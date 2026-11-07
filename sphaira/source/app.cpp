@@ -151,6 +151,36 @@ constexpr KeyboardState::MapEntry KEYBOARD_BUTTON_MAP[] = {
     {HidKeyboardKey_R,              static_cast<u64>(Button::SELECT)},
 };
 
+// Leave room for export subfolders and filenames.
+constexpr size_t MAX_EXPORT_PATH_LENGTH = std::min<size_t>(200, fs::FsPathReal::FS_REAL_MAX_LENGTH - 128);
+
+bool NormalizeExportPath(std::string& path) {
+    if (path.empty()) {
+        return false;
+    }
+    if (!path.starts_with('/')) {
+        path.insert(path.begin(), '/');
+    }
+    while (path.size() > 1 && path.ends_with('/')) {
+        path.pop_back();
+    }
+    if (path.size() > MAX_EXPORT_PATH_LENGTH) {
+        return false;
+    }
+    std::string_view parts{path};
+    parts.remove_prefix(1);
+    for (;;) {
+        const auto slash = parts.find('/');
+        if (!swkbd::IsSafeName(parts.substr(0, slash))) {
+            return false;
+        }
+        if (slash == parts.npos) {
+            return true;
+        }
+        parts.remove_prefix(slash + 1);
+    }
+}
+
 constexpr NszOption NSZ_COMPRESS_LEVEL_OPTIONS[] = {
     { .value = 0, .name = "Level 0 (no compression)" },
     { .value = 1, .name = "Level 1" },
@@ -1730,7 +1760,8 @@ App::App(const char* argv0) {
         } else if (!std::strcmp(Section, "accessibility")) {
             if (app->m_text_scroll_speed.LoadFrom(Key, Value)) {}
         } else if (!std::strcmp(Section, "dump")) {
-            if (app->m_dump_fix_filenames.LoadFrom(Key, Value)) {}
+            if (app->m_dump_path.LoadFrom(Key, Value)) {}
+            else if (app->m_dump_fix_filenames.LoadFrom(Key, Value)) {}
             else if (app->m_dump_app_folder.LoadFrom(Key, Value)) {}
             else if (app->m_dump_append_folder_with_xci.LoadFrom(Key, Value)) {}
             else if (app->m_dump_trim_xci.LoadFrom(Key, Value)) {}
@@ -1783,6 +1814,12 @@ App::App(const char* argv0) {
         SCOPED_TIMESTAMP("config init");
         ini_browse(cb, this, CONFIG_PATH);
     }
+
+    auto dump_path = m_dump_path.Get();
+    if (!NormalizeExportPath(dump_path)) {
+        dump_path = DEFAULT_DUMP_PATH;
+    }
+    m_dump_path.LoadFrom("path", dump_path.c_str());
 
     if (App::GetLogEnable()) {
         log_file_init();
@@ -2509,6 +2546,30 @@ void App::DisplayDumpOptions(bool left_side) {
             "Disabling this would use /name.xci"
         )
     );
+
+    auto dump_path_entry = options->Add<ui::SidebarEntryTextBase>(
+        "Export path"_i18n, "sdmc:" + App::GetApp()->m_dump_path.Get(), nullptr,
+        i18n::get("dump_path_info",
+            "Sets the base folder used for exports.\n"
+            "For example, /dumps\n\n"
+            "All exported files will be saved inside this folder."
+        )
+    );
+
+    dump_path_entry->SetCallback([dump_path_entry](){
+        std::string out;
+        const auto current = App::GetApp()->m_dump_path.Get();
+
+        if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, "Export path"_i18n.c_str(), "Enter export path..."_i18n.c_str(), current.c_str())) && !out.empty()) {
+            if (!NormalizeExportPath(out)) {
+                App::PushErrorBox(MAKERESULT(Module_Libnx, LibnxError_BadInput), "Export path"_i18n);
+                return;
+            }
+            App::GetApp()->m_dump_path.Set(out);
+            dump_path_entry->SetValue("sdmc:" + out);
+        }
+    });
+
     options->Add<ui::SidebarEntryBool>(
         "Append folder with .xci"_i18n, App::GetApp()->m_dump_append_folder_with_xci,
         i18n::get("xci_folder_info",

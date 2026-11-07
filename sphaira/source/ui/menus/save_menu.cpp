@@ -299,7 +299,7 @@ auto BuildSaveName(const Entry& e) -> fs::FsPath {
     return name_buf;
 }
 
-auto BuildSaveBasePath(const Entry& e, bool force_id_path = false) -> fs::FsPath {
+auto BuildSaveBasePath(const Entry& e, const fs::FsPath& root, bool force_id_path = false) -> fs::FsPath {
     fs::FsPath name;
     if (e.save_data_type == FsSaveDataType_System || e.save_data_type == FsSaveDataType_SystemBcat) {
         std::snprintf(name, sizeof(name), "%016lX", e.system_save_data_id);
@@ -309,7 +309,7 @@ auto BuildSaveBasePath(const Entry& e, bool force_id_path = false) -> fs::FsPath
         name = BuildSaveName(e);
     }
 
-    return fs::AppendPath("/dumps/" + GetSaveFolder(e), name);
+    return fs::AppendPath(fs::AppendPath(root, GetSaveFolder(e)), name);
 }
 
 void FreeEntry(NVGcontext* vg, Entry& e) {
@@ -752,6 +752,9 @@ void Menu::BackupSaves(std::vector<std::reference_wrapper<Entry>>& entries, u32 
         App::Push<ProgressBox>(0, "Backup"_i18n, "", [this, entries, location, flags](auto pbox) -> Result {
             return BackupSaveInternal(pbox, location, entries, flags);
         }, [](Result rc){
+            if (rc == Result_TransferCancelled) {
+                return;
+            }
             App::PushErrorBox(rc, "Backup failed!"_i18n);
 
             if (R_SUCCEEDED(rc)) {
@@ -767,8 +770,13 @@ void Menu::RestoreSave() {
         fs::FsPath mount{};
 
         if (location.entry.type == dump::DumpLocationType_Stdio) {
-            mount = fs::AppendPath(location.stdio[location.entry.index].mount, location.stdio[location.entry.index].dump_path);
-            fs = std::make_unique<fs::FsStdio>(true, location.stdio[location.entry.index].mount);
+            const auto& loc = location.stdio[location.entry.index];
+            if (loc.mount.size() + loc.dump_path.size() + 1 >= PATH_MAX) {
+                App::PushErrorBox(Result_FsNewPathTooLarge, "Restore"_i18n);
+                return;
+            }
+            mount = fs::AppendPath(loc.mount, loc.dump_path);
+            fs = std::make_unique<fs::FsStdio>(true, loc.mount);
         } else if (location.entry.type == dump::DumpLocationType_SdCard) {
             fs = std::make_unique<fs::FsNativeSd>();
         } else {
@@ -776,13 +784,25 @@ void Menu::RestoreSave() {
             return;
         }
 
-        // get saves in /Saves/Name and /Saves/app_id
-        filebrowser::FsDirCollection collections[2]{};
-        for (auto i = 0; i < std::size(collections); i++) {
-            const auto save_path = fs::AppendPath(mount, BuildSaveBasePath(m_entries[m_index], i != 0));
-            filebrowser::FsView::get_collection(fs.get(), save_path, "", collections[i], true, false, false);
-            // reverse as they will be sorted in oldest -> newest.
-            // todo: better impl when both id and normal app folders are used.
+        const auto& entry = m_entries[m_index];
+        const fs::FsPath dump_root = App::GetApp()->m_dump_path.Get();
+        std::vector<fs::FsPath> candidates;
+        for (const fs::FsPath& root : {dump_root, fs::FsPath{App::DEFAULT_DUMP_PATH}}) {
+            for (bool by_id : {false, true}) {
+                const auto relative = BuildSaveBasePath(entry, root, by_id);
+                if (mount.size() + relative.size() >= PATH_MAX) {
+                    App::PushErrorBox(Result_FsNewPathTooLarge, "Restore"_i18n);
+                    return;
+                }
+                const auto path = fs::AppendPath(mount, relative);
+                if (std::find(candidates.begin(), candidates.end(), path) == candidates.end()) {
+                    candidates.push_back(path);
+                }
+            }
+        }
+        std::vector<filebrowser::FsDirCollection> collections(candidates.size());
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            filebrowser::FsView::get_collection(fs.get(), candidates[i], "", collections[i], true, false, false);
             std::ranges::reverse(collections[i].files);
         }
 
@@ -795,14 +815,18 @@ void Menu::RestoreSave() {
                     continue;
                 }
 
-                items.emplace_back(p.name);
+                if (collection.path.size() + 1 + view.size() >= PATH_MAX) {
+                    App::PushErrorBox(Result_FsNewPathTooLarge, "Restore"_i18n);
+                    return;
+                }
                 paths.emplace_back(fs::AppendPath(collection.path, p.name));
+                items.emplace_back(dump_root == App::DEFAULT_DUMP_PATH ? std::string{p.name} : paths.back().toString());
             }
         }
 
         if (paths.empty()) {
             App::Push<ui::OptionBox>(
-                i18n::Reorder("No saves found in ", fs::AppendPath(mount, BuildSaveBasePath(m_entries[m_index])).toString()),
+                i18n::Reorder("No saves found in ", candidates.front().toString()),
                 "OK"_i18n
             );
             return;
@@ -848,10 +872,10 @@ void Menu::RestoreSave() {
     });
 }
 
-auto Menu::BuildSavePath(const Entry& e, u32 flags) const -> fs::FsPath {
+Result Menu::BuildSavePath(const Entry& e, u32 flags, fs::FsPath& path) const {
     const auto t = std::time(NULL);
     const auto tm = std::localtime(&t);
-    const auto base = BuildSaveBasePath(e);
+    const auto base = BuildSaveBasePath(e, App::GetApp()->m_dump_path.Get());
 
     char time[64];
     std::snprintf(time, sizeof(time), "%u.%02u.%02u @ %02u.%02u.%02u", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
@@ -874,22 +898,27 @@ auto Menu::BuildSavePath(const Entry& e, u32 flags) const -> fs::FsPath {
     }
 
     if (flags & BackupFlag_SetName) {
-        std::string out;
-        while (out.empty()) {
+        while (true) {
+            std::string out;
             const auto header = i18n::Reorder("Set name for ", e.GetName());
             if (R_FAILED(swkbd::ShowText(out, SwkbdType_QWERTY, header.c_str(), "Set backup name"_i18n.c_str(), name, 1, 128))) {
-                return {};
+                return Result_TransferCancelled;
             }
             if (!swkbd::IsSafeName(out)) {
                 App::Notify("Invalid file name"_i18n);
-                out.clear();
+                continue;
             }
+            if (!out.ends_with(".zip")) {
+                out += ".zip";
+            }
+            name = out;
+            break;
         }
-
-        name = out;
     }
 
-    return fs::AppendPath(base, name);
+    R_UNLESS(base.size() + 1 + name.size() < PATH_MAX, Result_FsNewPathTooLarge);
+    path = fs::AppendPath(base, name);
+    R_SUCCEED();
 }
 
 Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::FsPath& path) {
@@ -1080,8 +1109,7 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
     for (auto& e : entries) {
         // ensure that we have title name and icon loaded.
         LoadControlEntry(e);
-        paths.emplace_back(BuildSavePath(e, flags));
-        R_UNLESS(!paths.back().empty(), Result_TransferCancelled);
+        R_TRY(BuildSavePath(e, flags, paths.emplace_back()));
     }
 
     const auto compressed = m_compress_save_backup.Get();

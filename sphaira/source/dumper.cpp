@@ -178,7 +178,7 @@ private:
 };
 
 constexpr DumpLocationEntry DUMP_LOCATIONS[]{
-    { DumpLocationType_SdCard, "microSD card (/dumps/)" },
+    { DumpLocationType_SdCard, "microSD card" },
     { DumpLocationType_Usb, "USB export to PC (usb_export.py)" },
     { DumpLocationType_UsbS2S, "USB transfer (Switch 2 Switch)" },
     { DumpLocationType_DevNull, "/dev/null (Speed Test)" },
@@ -321,6 +321,8 @@ Result DumpToFile(ui::ProgressBox* pbox, fs::Fs* fs, const fs::FsPath& root, Bas
     const auto is_file_based_emummc = App::IsFileBaseEmummc();
 
     for (const auto& path : paths) {
+        // Include the full path and ".temp" suffix.
+        R_UNLESS(root.size() + (root.ends_with("/") ? 0 : 1) + path.size() - (path.starts_with("/") ? 1 : 0) + sizeof(".temp") <= PATH_MAX, Result_FsNewPathTooLarge);
         const auto base_path = fs::AppendPath(root, path);
         const auto file_size = source->GetSize(path);
         pbox->SetImage(source->GetIcon(path));
@@ -371,6 +373,7 @@ Result DumpToFileNative(ui::ProgressBox* pbox, BaseSource* source, std::span<con
 
 Result DumpToStdio(ui::ProgressBox* pbox, const location::StdioEntry& loc, BaseSource* source, std::span<const fs::FsPath> paths, const CustomTransfer& custom_transfer) {
     fs::FsStdio fs{};
+    R_UNLESS(loc.mount.size() + loc.dump_path.size() + 1 < PATH_MAX, Result_FsNewPathTooLarge);
     const auto mount_path = fs::AppendPath(loc.mount, loc.dump_path);
     return DumpToFile(pbox, &fs, mount_path, source, paths, custom_transfer);
 }
@@ -513,7 +516,12 @@ void DumpGetLocation(const std::string& title, u32 location_flags, const OnLocat
             if (!custom_transfer || DUMP_LOCATIONS[i].type != DumpLocationType_UsbS2S) {
                 log_write("[dump] got name 2: %s\n", DUMP_LOCATIONS[i].name);
                 dump_entries.emplace_back(DUMP_LOCATIONS[i].type, i);
-                items.emplace_back(i18n::get(DUMP_LOCATIONS[i].name));
+
+                if (DUMP_LOCATIONS[i].type == DumpLocationType_SdCard) {
+                    items.emplace_back(i18n::get(DUMP_LOCATIONS[i].name) + " (" + App::GetApp()->m_dump_path.Get() + "/)");
+                } else {
+                    items.emplace_back(i18n::get(DUMP_LOCATIONS[i].name));
+                }
             }
         }
     }

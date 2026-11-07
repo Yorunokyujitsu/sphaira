@@ -93,7 +93,7 @@ private:
     void BackupSaves(std::vector<std::reference_wrapper<Entry>>& entries, u32 flags);
     void RestoreSave();
 
-    auto BuildSavePath(const Entry& e, u32 flags) const -> fs::FsPath;
+    Result BuildSavePath(const Entry& e, u32 flags, fs::FsPath& path) const;
     Result RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::FsPath& path);
     Result BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& location, Entry& e, u32 flags);
     Result BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& location, std::span<const std::reference_wrapper<Entry>> entries, u32 flags);

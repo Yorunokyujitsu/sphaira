@@ -53,8 +53,6 @@ namespace {
 
 constexpr u32 XCI_MAGIC = std::byteswap(0x48454144);
 constexpr u32 REMOUNT_ATTEMPT_MAX = 8; // same as nxdumptool.
-constexpr const char* DUMP_GAMECARD_BASE_PATH = "/dumps/Gamecard";
-constexpr const char* DUMP_XCZ_BASE_PATH = "/dumps/XCZ";
 
 enum DumpFileType {
     DumpFileType_XCI,
@@ -114,88 +112,95 @@ auto GetDumpTypeStr(u8 type) -> const char* {
     return "";
 }
 
-auto BuildXciName(const ApplicationEntry& e) -> fs::FsPath {
-    const auto export_name = title::MakeExportTitleName(
+auto BuildXciName(const ApplicationEntry& e, std::string& title_name) -> fs::FsPath {
+    title_name = title::MakeExportTitleName(
         e.lang_entry.name, e.english_name, App::GetApp()->m_dump_fix_filenames.Get()
     );
 
     fs::FsPath path;
-    if (export_name.empty()) {
-        std::snprintf(path, sizeof(path), "[%016lX][v%u]", e.app_id, e.version);
+    if (title_name.empty()) {
+        char id[17];
+        std::snprintf(id, sizeof(id), "%016lX", e.app_id);
+        title_name = id;
+        std::snprintf(path, sizeof(path), "[%s][v%u]", id, e.version);
     } else {
-        std::snprintf(path, sizeof(path), "%.*s [%016lX][v%u]", static_cast<int>(export_name.size()), export_name.data(), e.app_id, e.version);
+        std::snprintf(path, sizeof(path), "%.*s [%016lX][v%u]", static_cast<int>(title_name.size()), title_name.data(), e.app_id, e.version);
     }
     return path;
 }
 
-auto BuildXciBasePath(std::span<const ApplicationEntry> entries) -> fs::FsPath {
+auto BuildXciBasePath(std::span<const ApplicationEntry> entries, fs::FsPath* folder = nullptr) -> fs::FsPath {
     fs::FsPath path;
-    for (s64 i = 0; i < std::size(entries); i++) {
+    for (size_t i = 0; i < entries.size(); ++i) {
+        std::string title_name;
+        const auto name = BuildXciName(entries[i], title_name);
+        const auto separator_length = i ? 3 : 0;
+        if (path.size() + separator_length + name.size() > 255) {
+            return {};
+        }
         if (i) {
             path += " + ";
         }
-        path += BuildXciName(entries[i]);
+        path += name;
+        if (folder) {
+            if (i) {
+                *folder += " + ";
+            }
+            title_name.erase(title_name.find_last_not_of(" .") + 1);
+            *folder += title_name;
+        }
     }
 
     return path;
 }
 
 #if 0
-// builds path suiteable for usb transfer.
+// builds path suitable for usb transfer.
 auto BuildFilePath(DumpFileType type, std::span<const ApplicationEntry> entries) -> fs::FsPath {
     return BuildXciBasePath(entries) + GetDumpTypeStr(type);
 }
 #endif
 
-// builds path suiteable for file dumps.
-auto BuildFullDumpPath(DumpFileType type, std::span<const ApplicationEntry> entries, bool use_folder) -> fs::FsPath {
-    const auto base_path = BuildXciBasePath(entries);
-    fs::FsPath out;
-
-    if (type == DumpFileType_XCZ) {
-        out = base_path + GetDumpTypeStr(type);
-        return fs::AppendPath(DUMP_XCZ_BASE_PATH, out);
-    } else {
-        if (use_folder) {
-            if (App::GetApp()->m_dump_append_folder_with_xci.Get()) {
-                out = base_path + ".xci/" + base_path + GetDumpTypeStr(type);
-            } else {
-                out = base_path + "/" + base_path + GetDumpTypeStr(type);
-            }
-        } else {
-            out = base_path + GetDumpTypeStr(type);
-        }
-
-        return fs::AppendPath(DUMP_GAMECARD_BASE_PATH, out);
-    }
+// builds path suitable for file dumps.
+auto GetDumpBasePath(DumpFileType type) -> fs::FsPath {
+    const auto dump_path = App::GetApp()->m_dump_path.Get();
+    return fs::AppendPath(dump_path, type == DumpFileType_XCZ ? "XCZ" : "Gamecard");
 }
 
 auto BuildFullDumpPath(DumpFileType type, std::span<const ApplicationEntry> entries) -> fs::FsPath {
-    // check if the base path is too long.
-    const auto max_len = fs::FsPathReal::FS_REAL_MAX_LENGTH - std::strlen(DUMP_GAMECARD_BASE_PATH) - 30;
+    const auto base_dump_path = GetDumpBasePath(type);
+
+    const auto suffix = GetDumpTypeStr(type);
     auto use_folder = App::GetApp()->m_dump_app_folder.Get();
+    const bool append_xci = type != DumpFileType_XCZ && App::GetApp()->m_dump_append_folder_with_xci.Get();
 
     for (;;) {
-        const auto mult = use_folder ? 2 : 1;
-
         for (size_t i = entries.size(); i > 0; i--) {
-            // see how many entries we can append to the file name.
-            const auto span = entries.subspan(0, i);
-            const auto base_path = BuildXciBasePath(span);
-
-            if (std::strlen(base_path) * mult < max_len) {
-                return BuildFullDumpPath(type, span, use_folder);
+            fs::FsPath folder;
+            const auto stem = BuildXciBasePath(entries.first(i), use_folder ? &folder : nullptr);
+            if (stem.empty() || stem.size() + std::strlen(suffix) + 5 > 255) {
+                continue;
             }
+            if (use_folder && append_xci) {
+                folder += ".xci";
+            }
+            const auto filename = stem + suffix;
+            const size_t folder_size = use_folder ? folder.size() + 1 : 0;
+            if (folder.size() > 255 || base_dump_path.size() + 1 + folder_size + filename.size() + sizeof(".temp") > PATH_MAX) {
+                continue;
+            }
+            const auto root = use_folder ? fs::AppendPath(base_dump_path, folder) : base_dump_path;
+            return fs::AppendPath(root, filename);
         }
 
         if (!use_folder) {
             // if we get here, the game name is *really* long. Give up.
-            log_write("[GC] huge game name, giving up: %s\n", BuildXciBasePath(entries).s);
+            log_write("[GC] huge game name, giving up: %s\n", entries.empty() ? "" : entries.front().lang_entry.name);
             return {};
         } else {
             // try again, but without the folder.
             use_folder = false;
-            log_write("[GC] huge game name trying again without the folder: %s\n", BuildXciBasePath(entries).s);
+            log_write("[GC] huge game name trying again without the folder: %s\n", entries.empty() ? "" : entries.front().lang_entry.name);
         }
     }
 }
@@ -1127,6 +1132,7 @@ Result Menu::DumpXcz(u32 flags) {
     std::vector<fs::FsPath> paths;
     source->xci_size = m_storage_trimmed_size;
     paths.emplace_back(BuildFullDumpPath(DumpFileType_XCZ, m_entries));
+    R_UNLESS(!paths.back().empty(), Result_FsNewPathTooLarge);
 
     // todo: log keys error.
     keys::Keys keys;
@@ -1209,6 +1215,9 @@ Result Menu::DumpGames(u32 flags) {
         }
 
 
+        for (const auto& path : paths) {
+            R_UNLESS(!path.empty(), Result_FsNewPathTooLarge);
+        }
         dump::Dump(source, paths, nullptr, location_flags);
         R_SUCCEED();
     };

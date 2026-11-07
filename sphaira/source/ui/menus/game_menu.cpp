@@ -45,13 +45,16 @@ namespace {
 std::atomic_bool g_change_signalled{};
 
 struct NspSource final : dump::BaseSource {
-    NspSource(const std::vector<NspEntry>& entries) : m_entries{entries} {
+    NspSource(const std::vector<NspEntry>& entries, const std::vector<fs::FsPath>& paths) : m_entries{entries} {
+        for (size_t i = 0; i < m_entries.size(); ++i) {
+            m_entries[i].path = paths[i];
+        }
         m_is_file_based_emummc = App::IsFileBaseEmummc();
     }
 
     Result Read(const std::string& path, void* buf, s64 off, s64 size, u64* bytes_read) override {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path.find(e.path.s) != path.npos;
+            return path == e.path.s;
         });
         R_UNLESS(it != m_entries.end(), Result_GameBadReadForDump);
 
@@ -69,7 +72,7 @@ struct NspSource final : dump::BaseSource {
 
     auto GetName(const std::string& path) const -> std::string {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path.find(e.path.s) != path.npos;
+            return path == e.path.s;
         });
 
         if (it != m_entries.end()) {
@@ -81,7 +84,7 @@ struct NspSource final : dump::BaseSource {
 
     auto GetSize(const std::string& path) const -> s64 {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path.find(e.path.s) != path.npos;
+            return path == e.path.s;
         });
 
         if (it != m_entries.end()) {
@@ -93,7 +96,7 @@ struct NspSource final : dump::BaseSource {
 
     auto GetIcon(const std::string& path) const -> int override {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path.find(e.path.s) != path.npos;
+            return path == e.path.s;
         });
 
         if (it != m_entries.end()) {
@@ -105,7 +108,7 @@ struct NspSource final : dump::BaseSource {
 
     Result GetEntryFromPath(const std::string& path, NspEntry& out) const {
         const auto it = std::ranges::find_if(m_entries, [&path](auto& e){
-            return path.find(e.path.s) != path.npos;
+            return path == e.path.s;
         });
         R_UNLESS(it != m_entries.end(), Result_GameBadReadForDump);
 
@@ -2044,15 +2047,18 @@ Result BuildNspEntries(Entry& e, u32 flags, std::vector<NspEntry>& out, bool to_
 
 void DumpNsp(const std::vector<NspEntry>& entries, bool to_nsz) {
     std::vector<fs::FsPath> paths;
+    const auto dump_path = App::GetApp()->m_dump_path.Get();
+    const auto base_path = fs::AppendPath(dump_path, to_nsz ? "NSZ" : "NSP");
+
     for (auto& e : entries) {
-        if (to_nsz) {
-            paths.emplace_back(fs::AppendPath("/dumps/NSZ", e.path));
-        } else {
-            paths.emplace_back(fs::AppendPath("/dumps/NSP", e.path));
+        if (base_path.size() + 1 + e.path.size() >= PATH_MAX) {
+            App::PushErrorBox(Result_FsNewPathTooLarge, "Export failed!"_i18n);
+            return;
         }
+        paths.emplace_back(fs::AppendPath(base_path, e.path));
     }
 
-    auto source = std::make_shared<NspSource>(entries);
+    auto source = std::make_shared<NspSource>(entries, paths);
 
     if (to_nsz) {
 #ifdef ENABLE_NSZ

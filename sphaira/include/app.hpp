@@ -283,6 +283,7 @@ public:
     static constexpr inline auto CONFIG_PATH = "/config/sphaira/config.ini";
     static constexpr inline auto PLAYLOG_PATH = "/config/sphaira/playlog.ini";
     static constexpr inline auto INI_SECTION = "config";
+    static constexpr inline auto DEFAULT_DUMP_PATH = "/dumps";
     static constexpr inline auto DEFAULT_THEME_PATH = "romfs:/themes/default_theme.ini";
 
     fs::FsPath m_app_path;
@@ -357,6 +358,7 @@ public:
     option::OptionBool m_lower_system_version{INI_SECTION, "lower_system_version", true};
 
     // dump options
+    option::OptionString m_dump_path{"dump", "path", DEFAULT_DUMP_PATH};
     option::OptionBool m_dump_fix_filenames{"dump", "fix_filenames", true};
     option::OptionBool m_dump_app_folder{"dump", "app_folder", true};
     option::OptionBool m_dump_append_folder_with_xci{"dump", "append_folder_with_xci", true};
