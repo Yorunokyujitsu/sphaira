@@ -5,17 +5,13 @@
 namespace sphaira::swkbd {
 namespace {
 
-struct Config {
-    char out_text[PATH_MAX]{};
-    bool numpad{};
-};
-
-Result ShowInternal(Config& cfg, const char* header, const char* guide, const char* initial, s64 len_min, s64 len_max) {
+Result ShowInternal(char* out_text, size_t out_size, SwkbdType type, const char* header, const char* guide, const char* initial, s64 len_min, s64 len_max) {
     SwkbdConfig c;
     R_TRY(swkbdCreate(&c, 0));
+    ON_SCOPE_EXIT(swkbdClose(&c));
     swkbdConfigMakePresetDefault(&c);
     swkbdConfigSetInitialCursorPos(&c, 1);
-    swkbdConfigSetType(&c, cfg.numpad ? SwkbdType_NumPad : SwkbdType_All);
+    swkbdConfigSetType(&c, type);
 
     // only works if len_max <= 32.
     if (header) {
@@ -43,23 +39,38 @@ Result ShowInternal(Config& cfg, const char* header, const char* guide, const ch
         swkbdConfigSetStringLenMax(&c, len_max);
     }
 
-    return swkbdShow(&c, cfg.out_text, sizeof(cfg.out_text));
+    return swkbdShow(&c, out_text, out_size);
 }
 
 } // namespace
 
-Result ShowText(std::string& out, const char* header, const char* guide, const char* initial, s64 len_min, s64 len_max) {
-    Config cfg{};
-    R_TRY(ShowInternal(cfg, header, guide, initial, len_min, len_max));
-    out = cfg.out_text;
+bool IsSafeName(std::string_view name) {
+    if (name.empty() || name.size() > 255 || name.back() == '.' || name.back() == ' ') {
+        return false;
+    }
+    for (unsigned char c : name) {
+        if (c < 0x20 || c >= 0x7f || std::string_view{"\\/:*?\"<>|"}.find(c) != std::string_view::npos) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Result ShowText(std::string& out, SwkbdType type, const char* header, const char* guide, const char* initial, s64 len_min, s64 len_max) {
+    char text[PATH_MAX]{};
+    R_TRY(ShowInternal(text, sizeof(text), type, header, guide, initial, len_min, len_max));
+    out = text;
     R_SUCCEED();
 }
 
+Result ShowText(std::string& out, const char* header, const char* guide, const char* initial, s64 len_min, s64 len_max) {
+    return ShowText(out, SwkbdType_All, header, guide, initial, len_min, len_max);
+}
+
 Result ShowNumPad(s64& out, const char* header, const char* guide, const char* initial, s64 len_min, s64 len_max) {
-    Config cfg{};
-    cfg.numpad = true;
-    R_TRY(ShowInternal(cfg, header, guide, initial, len_min, len_max));
-    out = std::atoll(cfg.out_text);
+    char text[PATH_MAX]{};
+    R_TRY(ShowInternal(text, sizeof(text), SwkbdType_NumPad, header, guide, initial, len_min, len_max));
+    out = std::atoll(text);
     R_SUCCEED();
 }
 

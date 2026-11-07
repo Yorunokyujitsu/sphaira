@@ -2,10 +2,14 @@
 
 #include <switch.h>
 #include <string>
+#include <string_view>
 #include <sys/syslimits.h>
 
 namespace sphaira::swkbd {
 
+bool IsSafeName(std::string_view name);
+
+Result ShowText(std::string& out, SwkbdType type, const char* header = nullptr, const char* guide = nullptr, const char* initial = nullptr, s64 len_min = -1, s64 len_max = PATH_MAX);
 Result ShowText(std::string& out, const char* header = nullptr, const char* guide = nullptr, const char* initial = nullptr, s64 len_min = -1, s64 len_max = PATH_MAX);
 Result ShowNumPad(s64& out, const char* header = nullptr, const char* guide = nullptr, const char* initial = nullptr, s64 len_min = -1, s64 len_max = PATH_MAX);
 

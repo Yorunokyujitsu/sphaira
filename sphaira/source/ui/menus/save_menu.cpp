@@ -877,7 +877,11 @@ auto Menu::BuildSavePath(const Entry& e, u32 flags) const -> fs::FsPath {
         std::string out;
         while (out.empty()) {
             const auto header = i18n::Reorder("Set name for ", e.GetName());
-            if (R_FAILED(swkbd::ShowText(out, header.c_str(), "Set backup name"_i18n.c_str(), name, 1, 128))) {
+            if (R_FAILED(swkbd::ShowText(out, SwkbdType_QWERTY, header.c_str(), "Set backup name"_i18n.c_str(), name, 1, 128))) {
+                return {};
+            }
+            if (!swkbd::IsSafeName(out)) {
+                App::Notify("Invalid file name"_i18n);
                 out.clear();
             }
         }
@@ -1077,6 +1081,7 @@ Result Menu::BackupSaveInternal(ProgressBox* pbox, const dump::DumpLocation& loc
         // ensure that we have title name and icon loaded.
         LoadControlEntry(e);
         paths.emplace_back(BuildSavePath(e, flags));
+        R_UNLESS(!paths.back().empty(), Result_TransferCancelled);
     }
 
     const auto compressed = m_compress_save_backup.Get();

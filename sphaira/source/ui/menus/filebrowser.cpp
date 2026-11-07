@@ -60,6 +60,35 @@ using RomDatabaseIndexs = std::vector<size_t>;
 
 std::atomic_bool g_change_signalled{};
 
+bool CheckInputPath(std::string_view path, std::string_view root, bool directory = false) {
+    if (path.empty() || path.size() >= PATH_MAX || root.empty()) {
+        return false;
+    }
+    if (path.starts_with(root)) {
+        path.remove_prefix(root.size());
+        if (!root.ends_with('/') && !path.empty()) {
+            if (!path.starts_with('/')) {
+                return false;
+            }
+            path.remove_prefix(1);
+        }
+    }
+    if (path.empty()) {
+        return directory;
+    }
+    while (!path.empty()) {
+        const auto slash = path.find('/');
+        if (!swkbd::IsSafeName(path.substr(0, slash))) {
+            return false;
+        }
+        if (slash == path.npos) {
+            return true;
+        }
+        path.remove_prefix(slash + 1);
+    }
+    return directory;
+}
+
 constexpr FsEntry FS_ENTRY_DEFAULT{
     "microSD card", "/", FsType::Sd, FsEntryFlag_Assoc | FsEntryFlag_IsSd,
 };
@@ -1712,7 +1741,11 @@ void FsView::DisplayOptions() {
             const auto& entry = GetEntry();
             const auto name = entry.GetName();
             const auto header = "Set new name"_i18n;
-            if (R_SUCCEEDED(swkbd::ShowText(out, header.c_str(), header.c_str(), name.c_str())) && !out.empty() && out != name) {
+            if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, header.c_str(), header.c_str(), name.c_str())) && !out.empty() && out != name) {
+                if (!swkbd::IsSafeName(out) || m_path.size() + (m_path.ends_with("/") ? 0 : 1) + out.size() >= PATH_MAX) {
+                    App::Notify("Invalid file name"_i18n);
+                    return;
+                }
                 App::PopToMenu();
 
                 const auto src_path = GetNewPath(entry);
@@ -1805,7 +1838,11 @@ void FsView::DisplayOptions() {
 
                 options->Add<SidebarEntryCallback>("Extract to..."_i18n, [this](){
                     std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Extract path", "Enter the path to the folder to extract into"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+                    if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, "Extract path", "Enter the path to the folder to extract into"_i18n.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+                        if (!CheckInputPath(out, m_fs_entry.root, true)) {
+                            App::Notify("Invalid file path"_i18n);
+                            return;
+                        }
                         UnzipFiles(out);
                     }
                 });
@@ -1823,7 +1860,18 @@ void FsView::DisplayOptions() {
 
                 options->Add<SidebarEntryCallback>("Compress to..."_i18n, [this](){
                     std::string out;
-                    if (R_SUCCEEDED(swkbd::ShowText(out, "Compress path", "Enter the path to the folder to compress into"_i18n.c_str(), m_path)) && !out.empty()) {
+                    if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, "Compress path", "Enter the path to the folder to compress into"_i18n.c_str(), m_path)) && !out.empty()) {
+                        if (out.ends_with('/') || out == m_fs_entry.root.s) {
+                            App::Notify("Invalid file path"_i18n);
+                            return;
+                        }
+                        if (!out.ends_with(".zip")) {
+                            out += ".zip";
+                        }
+                        if (!CheckInputPath(out, m_fs_entry.root)) {
+                            App::Notify("Invalid file path"_i18n);
+                            return;
+                        }
                         ZipFiles(out);
                     }
                 });
@@ -1876,15 +1924,16 @@ void FsView::DisplayAdvancedOptions() {
         options->Add<SidebarEntryCallback>("Create File"_i18n, [this](){
             std::string out;
             const auto header = "Set File Name"_i18n;
-            if (R_SUCCEEDED(swkbd::ShowText(out, header.c_str(), header.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
-                App::PopToMenu();
-
-                fs::FsPath full_path;
-                if (out.starts_with(m_fs_entry.root.s)) {
-                    full_path = out;
-                } else {
-                    full_path = fs::AppendPath(m_path, out);
+            if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, header.c_str(), header.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+                if (!out.starts_with(m_fs_entry.root.s)) {
+                    out = m_path.toString() + (m_path.ends_with("/") ? "" : "/") + out;
                 }
+                if (!CheckInputPath(out, m_fs_entry.root)) {
+                    App::Notify("Invalid file path"_i18n);
+                    return;
+                }
+                App::PopToMenu();
+                const fs::FsPath full_path{out};
 
                 m_fs->CreateDirectoryRecursivelyWithPath(full_path);
                 if (R_SUCCEEDED(m_fs->CreateFile(full_path, 0, 0))) {
@@ -1899,15 +1948,16 @@ void FsView::DisplayAdvancedOptions() {
         options->Add<SidebarEntryCallback>("Create Folder"_i18n, [this](){
             std::string out;
             const auto header = "Set Folder Name"_i18n;
-            if (R_SUCCEEDED(swkbd::ShowText(out, header.c_str(), header.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
-                App::PopToMenu();
-
-                fs::FsPath full_path;
-                if (out.starts_with(m_fs_entry.root.s)) {
-                    full_path = out;
-                } else {
-                    full_path = fs::AppendPath(m_path, out);
+            if (R_SUCCEEDED(swkbd::ShowText(out, SwkbdType_QWERTY, header.c_str(), header.c_str(), fs::AppendPath(m_path, ""))) && !out.empty()) {
+                if (!out.starts_with(m_fs_entry.root.s)) {
+                    out = m_path.toString() + (m_path.ends_with("/") ? "" : "/") + out;
                 }
+                if (!CheckInputPath(out, m_fs_entry.root)) {
+                    App::Notify("Invalid file path"_i18n);
+                    return;
+                }
+                App::PopToMenu();
+                const fs::FsPath full_path{out};
 
                 if (R_SUCCEEDED(m_fs->CreateDirectoryRecursively(full_path))) {
                     log_write("created dir: %s\n", full_path.s);
