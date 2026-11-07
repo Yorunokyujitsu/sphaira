@@ -217,13 +217,11 @@ struct FsPathReal {
                 continue;
             }
 
-            // save single char.
-            s[real++] = str[i];
-
-            // check if we have exceeded the path.
-            if (real >= FS_REAL_MAX_LENGTH) {
+            // leave room for the null terminator.
+            if (real + 1 >= FS_REAL_MAX_LENGTH) {
                 break;
             }
+            s[real++] = str[i];
         }
 
         // null the end.
