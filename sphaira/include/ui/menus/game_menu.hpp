@@ -188,8 +188,11 @@ private:
     option::OptionBool m_play_stats{INI_SECTION, "play_stats", true};
 };
 
+struct GameCardContent;
+
 struct NcmMetaData {
-    // points to global service, do not close manually!
+    std::shared_ptr<GameCardContent> gamecard{};
+    // Service handles are borrowed; gamecards use the secure partition.
     NcmContentStorage* cs{};
     NcmContentMetaDatabase* db{};
     u64 app_id{};
@@ -198,7 +201,7 @@ struct NcmMetaData {
 
 Result GetMetaEntries(const Entry& e, title::MetaEntries& out, u32 flags = title::ContentFlag_All);
 
-Result GetNcmMetaFromMetaStatus(const NsApplicationContentMetaStatus& status, NcmMetaData& out);
+Result GetNcmMetaFromMetaStatus(const NsApplicationContentMetaStatus& status, NcmMetaData& out, bool own_gamecard = false);
 void DeleteMetaEntries(u64 app_id, int image, const std::string& name, const title::MetaEntries& entries);
 // removes the content of each application but keeps its record, icon and
 // saves, same as the system's "Archive Software".
@@ -226,6 +229,7 @@ struct NspEntry {
     std::vector<u8> nsp_data{};
     // size of the entier nsp.
     s64 nsp_size{};
+    std::shared_ptr<GameCardContent> gamecard{};
     // copy of ncm cs, it is not closed.
     NcmContentStorage cs{};
     // copy of the icon, if invalid, it will use the default icon.
@@ -244,6 +248,7 @@ private:
 };
 
 struct ContentInfoEntry {
+    std::shared_ptr<GameCardContent> gamecard{};
     NsApplicationContentMetaStatus status{};
     std::vector<NcmContentInfo> content_infos{};
     std::vector<NcmRightsId> ncm_rights_id{};

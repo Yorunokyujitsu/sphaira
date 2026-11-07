@@ -30,6 +30,7 @@
 #include "yati/nx/es.hpp"
 #include "yati/container/base.hpp"
 #include "yati/container/nsp.hpp"
+#include "yati/source/file.hpp"
 
 #include <utility>
 #include <cstring>
@@ -40,6 +41,39 @@
 #include <minIni.h>
 
 namespace sphaira::ui::menu::game {
+
+struct GameCardContent {
+    NcmContentMetaDatabase db{};
+    FsGameCardHandle handle{};
+    std::unique_ptr<fs::FsNativeGameCard> fs{};
+
+    ~GameCardContent() {
+        ncmContentMetaDatabaseClose(&db);
+    }
+
+    Result Mount() {
+        FsDeviceOperator dev_op{};
+        R_TRY(fsOpenDeviceOperator(&dev_op));
+        ON_SCOPE_EXIT(fsDeviceOperatorClose(&dev_op));
+
+        // Raw dumping may invalidate the secure partition handle.
+        for (u32 i = 0; i < 8; i++) {
+            R_TRY(fsDeviceOperatorGetGameCardHandle(&dev_op, &handle));
+            fs = std::make_unique<fs::FsNativeGameCard>(&handle, FsGameCardPartition_Secure);
+            if (R_SUCCEEDED(fs->GetFsOpenResult())) {
+                R_SUCCEED();
+            }
+        }
+        return fs->GetFsOpenResult();
+    }
+
+    Result GetRightsId(const NcmContentInfo& info, NcmRightsId& out) {
+        fs::FsPath path;
+        std::snprintf(path, sizeof(path), "@GcS%08x://%s%s", handle.value, utils::hexIdToStr(info.content_id).str, info.content_type == NcmContentType_Meta ? ".cnmt.nca" : ".nca");
+        return fsGetRightsIdAndKeyGenerationByPath(path, FsContentAttributes_All, &out.key_generation, &out.rights_id);
+    }
+};
+
 namespace {
 
 std::atomic_bool g_change_signalled{};
@@ -129,10 +163,17 @@ Result NszExport(ProgressBox* pbox, const keys::Keys& keys, dump::BaseSource* _s
     R_TRY(source->GetEntryFromPath(path, entry));
 
     const auto nca_creator = [&entry](const nca::Header& header, const keys::KeyEntry& title_key, const utils::nsz::Collection& collection) {
-        const auto content_id = ncm::GetContentIdFromStr(collection.name.c_str());
+        std::shared_ptr<yati::source::Base> nca_source;
+        if (entry.gamecard) {
+            // Read the original .nca instead of the output .ncz.
+            const auto nca_name = collection.name.substr(0, collection.name.find_last_of('.')) + ".nca";
+            nca_source = std::make_shared<yati::source::File>(entry.gamecard->fs.get(), fs::AppendPath("/", nca_name));
+        } else {
+            const auto content_id = ncm::GetContentIdFromStr(collection.name.c_str());
+            nca_source = std::make_shared<ncm::NcmSource>(&entry.cs, &content_id);
+        }
         return std::make_unique<nca::NcaReader>(
-            header, &title_key, collection.size,
-            std::make_shared<ncm::NcmSource>(&entry.cs, &content_id)
+            header, &title_key, collection.size, nca_source
         );
     };
 
@@ -534,6 +575,11 @@ Result NspEntry::Read(void* buf, s64 off, s64 size, u64* bytes_read) {
             *bytes_read = size = ClipSize(off, size, collection.size);
 
             if (collection.name.ends_with(".nca")) {
+                if (gamecard) {
+                    fs::File file;
+                    R_TRY(gamecard->fs->OpenFile(fs::AppendPath("/", collection.name), FsOpenMode_Read, &file));
+                    return file.Read(off, buf, size, 0, bytes_read);
+                }
                 const auto id = ncm::GetContentIdFromStr(collection.name.c_str());
                 return ncmContentStorageReadContentIdFile(&cs, buf, size, &id, off);
             } else if (collection.name.ends_with(".tik") || collection.name.ends_with(".cert")) {
@@ -1846,9 +1892,19 @@ Result GetMetaEntries(const Entry& e, title::MetaEntries& out, u32 flags) {
     return title::GetMetaEntries(e.app_id, out, flags);
 }
 
-Result GetNcmMetaFromMetaStatus(const NsApplicationContentMetaStatus& status, NcmMetaData& out) {
-    out.cs = &title::GetNcmCs(status.storageID);
-    out.db = &title::GetNcmDb(status.storageID);
+Result GetNcmMetaFromMetaStatus(const NsApplicationContentMetaStatus& status, NcmMetaData& out, bool own_gamecard) {
+    out.gamecard.reset();
+    out.cs = nullptr;
+    out.db = nullptr;
+    // Raw access may cause NS to report StorageId_None.
+    if (own_gamecard && (status.storageID == NcmStorageId_None || status.storageID == NcmStorageId_GameCard)) {
+        out.gamecard = std::make_shared<GameCardContent>();
+        R_TRY(ncmOpenContentMetaDatabase(&out.gamecard->db, NcmStorageId_GameCard));
+        out.db = &out.gamecard->db;
+    } else {
+        out.cs = &title::GetNcmCs(status.storageID);
+        out.db = &title::GetNcmDb(status.storageID);
+    }
     out.app_id = ncm::GetAppId(status.meta_type, status.application_id);
 
     auto id_min = status.application_id;
@@ -1958,16 +2014,24 @@ auto BuildNspPath(const Entry& e, std::string_view export_name, const NsApplicat
 
 Result BuildContentEntry(const NsApplicationContentMetaStatus& status, ContentInfoEntry& out, bool to_nsz) {
     NcmMetaData meta;
-    R_TRY(GetNcmMetaFromMetaStatus(status, meta));
+    R_TRY(GetNcmMetaFromMetaStatus(status, meta, true));
 
     std::vector<NcmContentInfo> infos;
     R_TRY(ncm::GetContentInfos(meta.db, &meta.key, infos));
 
+    if (meta.gamecard) {
+        R_TRY(meta.gamecard->Mount());
+    }
+
     std::vector<NcmContentInfo> cnmt_infos;
     for (const auto& info : infos) {
         // check if we need to fetch tickets.
-        NcmRightsId ncm_rights_id;
-        R_TRY(ncmContentStorageGetRightsIdFromContentId(meta.cs, std::addressof(ncm_rights_id), std::addressof(info.content_id), FsContentAttributes_All));
+        NcmRightsId ncm_rights_id{};
+        if (meta.gamecard) {
+            R_TRY(meta.gamecard->GetRightsId(info, ncm_rights_id));
+        } else {
+            R_TRY(ncmContentStorageGetRightsIdFromContentId(meta.cs, std::addressof(ncm_rights_id), std::addressof(info.content_id), FsContentAttributes_All));
+        }
 
         if (es::IsRightsIdValid(ncm_rights_id.rights_id)) {
             const auto it = std::ranges::find_if(out.ncm_rights_id, [&ncm_rights_id](auto& e){
@@ -1989,6 +2053,10 @@ Result BuildContentEntry(const NsApplicationContentMetaStatus& status, ContentIn
     // append cnmt at the end of the list, following StandardNSP spec.
     out.content_infos.insert_range(out.content_infos.end(), cnmt_infos);
     out.status = status;
+    if (meta.gamecard) {
+        out.status.storageID = NcmStorageId_GameCard;
+    }
+    out.gamecard = std::move(meta.gamecard);
     R_SUCCEED();
 }
 
@@ -2039,7 +2107,10 @@ Result BuildNspEntry(const Entry& e, std::string_view export_name, const Content
     }
 
     out.nsp_data = yati::container::Nsp::Build(out.collections, out.nsp_size);
-    out.cs = title::GetNcmCs(info.status.storageID);
+    out.gamecard = info.gamecard;
+    if (!out.gamecard) {
+        out.cs = title::GetNcmCs(info.status.storageID);
+    }
 
     R_SUCCEED();
 }

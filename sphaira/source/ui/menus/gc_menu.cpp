@@ -880,7 +880,7 @@ Result Menu::GcMount() {
             }
         }});
         SetAction(Button::R2, Action{"Next"_i18n, [this](){
-            if (m_entry_index < m_entries.size()) {
+            if (m_entry_index + 1 < m_entries.size()) {
                 OnChangeIndex(m_entry_index + 1);
             }
         }});
@@ -906,6 +906,7 @@ void Menu::GcUnmount() {
 
 Result Menu::GcMountStorage() {
     GcUmountStorage();
+    ON_SCOPE_EXIT(if (!m_storage_mounted) { GcUnmountPartition(); });
 
     R_TRY(GcMountPartition(FsGameCardPartitionRaw_Normal));
     R_TRY(fsStorageGetSize(&m_storage, &m_storage_full_size));
@@ -947,10 +948,8 @@ Result Menu::GcMountStorage() {
 }
 
 void Menu::GcUmountStorage() {
-    if (m_storage_mounted) {
-        m_storage_mounted = false;
-        GcUnmountPartition();
-    }
+    m_storage_mounted = false;
+    GcUnmountPartition();
 }
 
 Result Menu::GcMountPartition(FsGameCardPartitionRaw partition) {
@@ -966,13 +965,14 @@ Result Menu::GcMountPartition(FsGameCardPartitionRaw partition) {
     Result rc;
     for (u32 i = 0; i < REMOUNT_ATTEMPT_MAX; i++) {
         R_TRY(fsDeviceOperatorGetGameCardHandle(&m_dev_op, &m_handle));
-        if (R_SUCCEEDED(rc = fsOpenGameCardStorage(&m_storage, &m_handle, partition))){
+        if (R_SUCCEEDED(rc = fsOpenGameCardStorage(&m_storage, &m_handle, partition))) {
             break;
         }
     }
 
+    R_TRY(rc);
     m_partition = partition;
-    return rc;
+    R_SUCCEED();
 }
 
 void Menu::GcUnmountPartition() {
