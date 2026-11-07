@@ -108,7 +108,7 @@ Result Usb::file_transfer_loop() {
     log_write("reading buffer: %zu\n", m_buf.size());
 
     R_TRY(Read(m_buf.data(), send_header.GetOffset(), m_buf.size(), &bytes_read));
-    const auto crc32 = crc32Calculate(m_buf.data(), m_buf.size());
+    const auto crc32 = crc32cCalculate(m_buf.data(), m_buf.size());
 
     log_write("read the buffer: %zu\n", bytes_read);
     // respond back with the length of the data and the crc32.
