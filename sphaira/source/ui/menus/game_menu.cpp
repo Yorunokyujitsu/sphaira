@@ -703,32 +703,60 @@ Menu::Menu(u32 flags) : grid::Menu{"Games"_i18n, flags} {
 
                 // language override is useless for forwarders.
                 if ((m_entries[m_index].app_id & 0x0500000000000000) != 0x0500000000000000) {
-                    // fetch supported languages if not already known.
+                    // Check NACP languages before metadata loading completes.
                     auto& lang_entry = m_entries[m_index];
-                    if (!lang_entry.supported_language_flag && lang_entry.status == title::NacpLoadStatus::Loaded) {
-                        title::GetSupportedLanguageFlag(lang_entry.app_id, &lang_entry.supported_language_flag);
+                    if (!lang_entry.supported_language_flag) {
+                        if (R_FAILED(title::GetSupportedLanguageFlag(lang_entry.app_id, &lang_entry.supported_language_flag))) {
+                            lang_entry.supported_language_flag = 0;
+                        }
                     }
 
-                    SidebarEntryArray::Items lang_items;
-                    lang_items.push_back("System default"_i18n);
+                    SidebarEntryArray::Items lang_items{"System default"_i18n};
+                    // Preserve original language indices after filtering.
+                    std::vector<s64> lang_indices{0};
                     for (size_t i = 0; i < game_lang::LANGUAGE_COUNT; i++) {
                         const auto& language = game_lang::LANGUAGES[i];
-                        auto name = std::string{language.name};
-                        if (lang_entry.supported_language_flag && !(lang_entry.supported_language_flag & language.supported_language_flag)) {
-                            name += i18n::get(" (not supported)");
+                        if (!(lang_entry.supported_language_flag & language.supported_language_flag)) {
+                            continue;
                         }
-                        lang_items.push_back(name);
+                        lang_items.push_back(i18n::get(language.name));
+                        lang_indices.push_back(static_cast<s64>(i) + 1);
                     }
 
-                    options->Add<SidebarEntryArray>("Launch language"_i18n, lang_items, [this](s64& index_out){
-                        const auto rc = game_lang::Set(m_entries[m_index].app_id, index_out);
+                    const auto saved_language = game_lang::Get(lang_entry.app_id);
+                    const auto saved_it = std::find(lang_indices.begin(), lang_indices.end(), saved_language);
+                    const bool unavailable_saved = saved_language > 0 && saved_it == lang_indices.end();
+                    const auto selected_index = unavailable_saved ? static_cast<s64>(lang_indices.size()) : saved_it != lang_indices.end() ? static_cast<s64>(std::distance(lang_indices.begin(), saved_it)) : 0;
+                    if (unavailable_saved) {
+                        lang_items.push_back(i18n::get(game_lang::LANGUAGES[saved_language - 1].name) + " - " + "Select a supported language."_i18n);
+                        lang_indices.push_back(saved_language);
+                    }
+
+                    const auto app_id = lang_entry.app_id;
+                    auto language_option = options->Add<SidebarEntryArray>("Launch language"_i18n, lang_items, [app_id, lang_indices, previous_index = selected_index](s64& index_out) mutable {
+                        if (index_out < 0 || static_cast<size_t>(index_out) >= lang_indices.size()) {
+                            index_out = previous_index;
+                            App::PushErrorBox(Result_GameLangBadIndex, "Failed to set language!"_i18n);
+                            return;
+                        }
+                        const auto rc = game_lang::Set(app_id, lang_indices[index_out]);
                         if (R_FAILED(rc)) {
+                            const auto current = game_lang::Get(app_id);
+                            const auto it = std::find(lang_indices.begin(), lang_indices.end(), current);
+                            if (it != lang_indices.end()) {
+                                index_out = std::distance(lang_indices.begin(), it);
+                            } else {
+                                index_out = previous_index;
+                            }
                             App::PushErrorBox(rc, "Failed to set language!"_i18n);
                         } else {
                             App::Notify("Language set! Takes effect on next launch."_i18n);
                         }
-                    }, game_lang::Get(lang_entry.app_id),
-                        "Forces this game to launch in the selected language.\nRequires Atmosphere."_i18n);
+                        previous_index = index_out;
+                    }, selected_index, "Forces this game to launch in the selected language.\nRequires Atmosphere."_i18n);
+                    if (unavailable_saved) {
+                        language_option->SetDisabled([selected_index](s64 row) { return row == selected_index; });
+                    }
                 }
 
                 auto export_nsp = options->Add<SidebarEntryCallback>("Export NSP"_i18n, [this](){

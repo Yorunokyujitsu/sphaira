@@ -10,28 +10,29 @@ namespace sphaira::game_lang {
 struct Language {
     const char* code; // "ja", "en-US", ...
     const char* name; // display name, i18n key.
+    const char* region_code; // "jpn", "usa", ...
     u32 supported_language_flag;
 };
 
 constexpr inline Language LANGUAGES[]{
-    {"ja",     "Japanese", BIT(2)},
-    {"en-US",  "English", BIT(0)},
-    {"fr",     "French", BIT(3)},
-    {"de",     "German", BIT(4)},
-    {"it",     "Italian", BIT(7)},
-    {"es",     "Spanish", BIT(6)},
-    {"zh-CN",  "Chinese (Simplified)", BIT(14)},
-    {"ko",     "Korean", BIT(12)},
-    {"nl",     "Dutch", BIT(8)},
-    {"pt",     "Portuguese", BIT(10)},
-    {"ru",     "Russian", BIT(11)},
-    {"zh-TW",  "Chinese (Traditional)", BIT(13)},
-    {"en-GB",  "British English", BIT(1)},
-    {"fr-CA",  "Canadian French", BIT(9)},
-    {"es-419", "Latin American Spanish", BIT(5)},
-    {"zh-Hans", "Simplified Chinese", BIT(14)},
-    {"zh-Hant", "Traditional Chinese", BIT(13)},
-    {"pt-BR",  "Portuguese (Brazil)", BIT(15)},
+    {"ja",      "Japanese",               "jpn", BIT(2)},
+    {"en-US",   "English",                "usa", BIT(0)},
+    {"fr",      "French",                 "eur", BIT(3)},
+    {"de",      "German",                 "eur", BIT(4)},
+    {"it",      "Italian",                "eur", BIT(7)},
+    {"es",      "Spanish",                "eur", BIT(6)},
+    {"zh-CN",   "Chinese (Simplified)",   "chn", BIT(14)},
+    {"ko",      "Korean",                 "kor", BIT(12)},
+    {"nl",      "Dutch",                  "eur", BIT(8)},
+    {"pt",      "Portuguese",             "eur", BIT(10)},
+    {"ru",      "Russian",                "eur", BIT(11)},
+    {"zh-TW",   "Chinese (Traditional)",  "twn", BIT(13)},
+    {"en-GB",   "British English",        "eur", BIT(1)},
+    {"fr-CA",   "Canadian French",        "usa", BIT(9)},
+    {"es-419",  "Latin American Spanish", "usa", BIT(5)},
+    {"zh-Hans", "Simplified Chinese",     "chn", BIT(14)},
+    {"zh-Hant", "Traditional Chinese",    "twn", BIT(13)},
+    {"pt-BR",   "Portuguese (Brazil)",    "usa", BIT(15)},
 };
 
 // index 0 is reserved for "system default" (no override).

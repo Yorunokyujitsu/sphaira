@@ -599,16 +599,30 @@ auto Get(u64 app_id, bool* cached) -> ThreadResultData* {
 }
 
 Result GetSupportedLanguageFlag(u64 app_id, u32* out) {
-    // fast path: already loaded by the title thread.
-    if (auto data = GetAsync(app_id); data && data->status == NacpLoadStatus::Loaded) {
+    *out = 0;
+
+    // A zero cached mask means unknown, not unsupported.
+    if (auto data = GetAsync(app_id); data &&
+        data->status == NacpLoadStatus::Loaded && data->supported_language_flag) {
         *out = data->supported_language_flag;
         R_SUCCEED();
     }
 
-    // slow path: parse the control nacp directly.
-    NacpStruct nacp{};
-    R_TRY(LoadControlNacp(app_id, nacp, nullptr));
-    *out = nacp.supported_language_flag;
+    // Read NACP via ns when the cache has no flags.
+    auto control = std::make_unique<NsApplicationControlData>();
+    u64 actual_size{};
+    if (R_SUCCEEDED(nsGetApplicationControlData(
+        NsApplicationControlSource_Storage, app_id, control.get(),
+        sizeof(NsApplicationControlData), &actual_size
+    )) && actual_size >= sizeof(NacpStruct) && actual_size <= sizeof(*control) &&
+        control->nacp.supported_language_flag) {
+        *out = control->nacp.supported_language_flag;
+        R_SUCCEED();
+    }
+
+    // Fall back to control NCA if ns returns no flags.
+    R_TRY(LoadControlNacp(app_id, control->nacp, nullptr));
+    *out = control->nacp.supported_language_flag;
     R_SUCCEED();
 }
 
