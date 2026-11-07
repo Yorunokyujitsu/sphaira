@@ -1803,7 +1803,7 @@ void FsView::DisplayOptions() {
                 auto entry = options->Add<SidebarEntryCallback>("Install"_i18n, [this](){
                     InstallFiles();
                 });
-                entry->Depends(App::GetInstallEnable, i18n::get(App::INSTALL_DEPENDS_STR), App::ShowEnableInstallPrompt);
+                entry->Depends(App::GetInstallEnable, i18n::get("enable_install_info", App::INSTALL_DEPENDS_STR), App::ShowEnableInstallPrompt);
             }
         }
 
@@ -1812,7 +1812,7 @@ void FsView::DisplayOptions() {
                 auto entry = options->Add<SidebarEntryCallback>("Install Forwarder"_i18n, [this](){;
                     InstallForwarder();
                 });
-                entry->Depends(App::GetInstallEnable, i18n::get(App::INSTALL_DEPENDS_STR), App::ShowEnableInstallPrompt);
+                entry->Depends(App::GetInstallEnable, i18n::get("enable_install_info", App::INSTALL_DEPENDS_STR), App::ShowEnableInstallPrompt);
             }
         }
     }

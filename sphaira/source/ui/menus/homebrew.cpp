@@ -791,7 +791,7 @@ void Menu::DisplayOptions() {
             InstallHomebrew();
         }, true);
 
-        forwarder_entry->Depends(App::GetInstallEnable, i18n::get(App::INSTALL_DEPENDS_STR), App::ShowEnableInstallPrompt);
+        forwarder_entry->Depends(App::GetInstallEnable, i18n::get("enable_install_info", App::INSTALL_DEPENDS_STR), App::ShowEnableInstallPrompt);
     }
 }
 
