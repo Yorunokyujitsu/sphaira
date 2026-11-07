@@ -11,8 +11,10 @@
 
 #include "utils/thread.hpp"
 #include "i18n.hpp"
+#include "regional_titles.hpp"
 
 #include <cstring>
+#include <cstdio>
 #include <atomic>
 #include <ranges>
 #include <algorithm>
@@ -22,6 +24,12 @@
 #include <zlib.h>
 
 namespace sphaira::title {
+
+static void CleanTitleName(std::string& text);
+static void ToAscii(std::string_view src, std::string& out);
+static std::string MakeCachedExportName(u64 app_id, std::string_view display_name);
+static std::string MakeExportName(u64 app_id, const NacpStruct& nacp, std::string_view display_name);
+
 namespace {
 
 struct ThreadData {
@@ -352,8 +360,12 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> ThreadResultData* {
         }
 
         result->status = NacpLoadStatus::Loaded;
-        std::strcpy(result->lang.name, data->name);
-        std::strcpy(result->lang.author, data->publisher);
+        std::snprintf(result->lang.name, sizeof(result->lang.name), "%s", data->name);
+        std::snprintf(result->lang.author, sizeof(result->lang.author), "%s", data->publisher);
+
+        // No extra NACP lookup until export.
+        result->export_name = MakeCachedExportName(app_id, result->lang.name);
+
         result->icon.resize(data->icon_size);
         std::memcpy(result->icon.data(), data->icon_data, result->icon.size());
     } else {
@@ -368,7 +380,7 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> ThreadResultData* {
 
         if (!ns::IsNsControlFetchSlow()) {
             TimeStamp ts;
-            if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, app_id, control.get(), sizeof(NsApplicationControlData), &actual_size))) {
+            if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_CacheOnly, app_id, control.get(), sizeof(NsApplicationControlData), &actual_size)) && actual_size >= sizeof(NacpStruct) && actual_size <= sizeof(*control)) {
                 has_nacp = true;
                 log_write("\t\t[ns control cache] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
             }
@@ -380,7 +392,7 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> ThreadResultData* {
 
         if (!has_nacp) {
             TimeStamp ts;
-            if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_Storage, app_id, control.get(), sizeof(NsApplicationControlData), &actual_size))) {
+            if (R_SUCCEEDED(nsGetApplicationControlData(NsApplicationControlSource_Storage, app_id, control.get(), sizeof(NsApplicationControlData), &actual_size)) && actual_size >= sizeof(NacpStruct) && actual_size <= sizeof(*control)) {
                 has_nacp = true;
                 log_write("\t\t[ns control storage] time taken: %.2fs %zums\n", ts.GetSecondsD(), ts.GetMs());
             }
@@ -393,7 +405,7 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> ThreadResultData* {
             result->supported_language_flag = control->nacp.supported_language_flag;
 
             bool valid = true;
-            NacpLanguageEntry* lang;
+            NacpLanguageEntry* lang{};
             if (R_SUCCEEDED(nacpGetLanguageEntry(&control->nacp, &lang)) && lang && lang->name[0]) {
                 result->lang = *lang;
             } else if (R_SUCCEEDED(nsGetApplicationDesiredLanguage(&control->nacp, &lang)) && lang && lang->name[0]) {
@@ -401,6 +413,12 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> ThreadResultData* {
             } else {
                 FakeNacpEntry(result.get());
                 valid = false;
+            }
+
+            if (valid) {
+                result->lang.name[sizeof(result->lang.name) - 1] = '\0';
+                result->lang.author[sizeof(result->lang.author) - 1] = '\0';
+                result->export_name = MakeExportName(app_id, control->nacp, result->lang.name);
             }
 
             if (!manual_load) {
@@ -456,6 +474,8 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> ThreadResultData* {
             if (!overrides.name.empty() && overrides.name.length() < sizeof(result->lang.name)) {
                 log_write("[TITLE] overriding name: %s -> %s\n", result->lang.name, overrides.name.c_str());
                 std::strcpy(result->lang.name, overrides.name.c_str());
+                // Update the export name for overrides too.
+                result->export_name = MakeCachedExportName(app_id, result->lang.name);
             }
 
             if (!overrides.author.empty() && overrides.author.length() < sizeof(result->lang.author)) {
@@ -463,6 +483,11 @@ auto ThreadData::Get(u64 app_id, bool* cached) -> ThreadResultData* {
                 std::strcpy(result->lang.author, overrides.author.c_str());
             }
         }
+    }
+
+    if (result->status == NacpLoadStatus::Loaded) {
+        result->current_name = result->lang.name;
+        CleanTitleName(result->current_name);
     }
 
     SCOPED_MUTEX(&m_mutex_result);
@@ -653,63 +678,232 @@ Result GetControlPath(NcmContentMetaDatabase* db, NcmContentStorage* cs, u64 id,
     return ncm::GetFsPathFromContentId(cs, key, content_id, out_program_id, out_path);
 }
 
-auto GetEnglishTitleName(u64 app_id) -> std::string {
-    NacpStruct nacp{};
-    if (R_FAILED(LoadControlNacp(app_id, nacp, nullptr))) {
-        return {};
+// Map supported Latin characters to ASCII.
+// Only covers Latin-based Switch languages.
+static char LatinToAscii(u32 code) {
+    switch (code) {
+        // À Á Â Ã Ä / à á â ã ä
+        case 0x00C0: case 0x00C1: case 0x00C2: case 0x00C3: case 0x00C4:
+            return 'A';
+        case 0x00E0: case 0x00E1: case 0x00E2: case 0x00E3: case 0x00E4:
+            return 'a';
+        // Ç / ç
+        case 0x00C7:
+            return 'C';
+        case 0x00E7:
+            return 'c';
+        // È É Ê Ë / è é ê ë
+        case 0x00C8: case 0x00C9: case 0x00CA: case 0x00CB:
+            return 'E';
+        case 0x00E8: case 0x00E9: case 0x00EA: case 0x00EB:
+            return 'e';
+        // Ì Í Î Ï / ì í î ï
+        case 0x00CC: case 0x00CD: case 0x00CE: case 0x00CF:
+            return 'I';
+        case 0x00EC: case 0x00ED: case 0x00EE: case 0x00EF:
+            return 'i';
+        // Ñ / ñ
+        case 0x00D1:
+            return 'N';
+        case 0x00F1:
+            return 'n';
+        // Ò Ó Ô Õ Ö / ò ó ô õ ö
+        case 0x00D2: case 0x00D3: case 0x00D4: case 0x00D5: case 0x00D6:
+            return 'O';
+        case 0x00F2: case 0x00F3: case 0x00F4: case 0x00F5: case 0x00F6:
+            return 'o';
+        // Ù Ú Û Ü / ù ú û ü
+        case 0x00D9: case 0x00DA: case 0x00DB: case 0x00DC:
+            return 'U';
+        case 0x00F9: case 0x00FA: case 0x00FB: case 0x00FC:
+            return 'u';
+        // Ÿ / ÿ
+        case 0x0178:
+            return 'Y';
+        case 0x00FF:
+            return 'y';
     }
 
-    NormalizeNacpLangData(nacp);
+    return 0;
+}
 
-    // nacp entries are NOT indexed by SetLanguage, they use their own order
-    // (see g_nacpLanguageTable in libnx). SetLanguage_ENUS would read
-    // BritishEnglish and SetLanguage_ENGB would read Korean.
-    // slot 0 is also where NormalizeNacpLangData() stores the fallback name.
-    enum NacpLanguage {
-        NacpLanguage_AmericanEnglish = 0,
-        NacpLanguage_BritishEnglish = 1,
-    };
+// decode_utf8 has no input length; copy at most one code point into padded storage.
+static ssize_t DecodeTitleUtf8(std::string_view text, size_t pos, u32* code) {
+    u8 bytes[5]{};
+    const auto remaining = std::min<size_t>(4, text.size() - pos);
+    std::memcpy(bytes, text.data() + pos, remaining);
+    const auto units = decode_utf8(code, bytes);
+    return units > 0 && static_cast<size_t>(units) <= remaining ? units : -1;
+}
 
-    for (const auto language : {NacpLanguage_AmericanEnglish, NacpLanguage_BritishEnglish}) {
-        const auto& entry = NacpLanguageEntries(nacp)[language];
-        if (entry.name[0]) {
-            return {std::begin(entry.name), std::find(std::begin(entry.name), std::end(entry.name), '\0')};
+static void CleanTitleName(std::string& text) {
+    static constexpr char illegal[] = "\\/:*?\"<>|";
+
+    std::string out;
+    out.reserve(text.size());
+
+    for (const char c : text) {
+        const auto value = static_cast<unsigned char>(c);
+        if (value < 0x20 || value == 0x7F || std::strchr(illegal, c) || (c == ' ' && (out.empty() || out.back() == ' '))) {
+            continue;
         }
+        out.push_back(c);
     }
 
+    while (!out.empty() && (out.back() == ' ' || out.back() == '.')) {
+        out.pop_back();
+    }
+
+    text = std::move(out);
+}
+
+// Transliterate the title and clean it up for ASCII-safe filename.
+// Example: Pokémon Diamant Étincelant → Pokemon Diamant Etincelant
+static void ToAscii(std::string_view src, std::string& out) {
+    out.clear();
+    out.reserve(src.size());
+
+    size_t pos = 0;
+
+    while (pos < src.size()) {
+        u32 code{};
+        const ssize_t units = DecodeTitleUtf8(src, pos, &code);
+
+        if (units <= 0) {
+            out.clear();
+            return;
+        }
+
+        if (code >= 0x20 && code < 0x7F) {
+            out.push_back(static_cast<char>(code));
+        } else {
+            switch (code) {
+                case 0x00C6: out += "AE"; break; // Æ
+                case 0x00E6: out += "ae"; break; // æ
+                case 0x00DF: out += "ss"; break; // ß
+                case 0x1E9E: out += "SS"; break; // ẞ
+                case 0x0132: out += "IJ"; break; // Ĳ
+                case 0x0133: out += "ij"; break; // ĳ
+                case 0x0152: out += "OE"; break; // Œ
+                case 0x0153: out += "oe"; break; // œ
+
+                case 0x00A0: // non-breaking space
+                    out.push_back(' ');
+                    break;
+
+                case 0x00A1:
+                    out.push_back('!');
+                    break;
+
+                case 0x00BF:
+                    out.push_back('?');
+                    break;
+
+                case 0x00A9: // copyright
+                case 0x00AE: // registered
+                case 0x2122: // trademark
+                case 0x00AB:
+                case 0x00BB:
+                    break;
+
+                case 0x2010: // hyphen
+                case 0x2011: // non-breaking hyphen
+                case 0x2012: // figure dash
+                case 0x2013: // en dash
+                case 0x2014: // em dash
+                    out.push_back('-');
+                    break;
+
+                case 0x2018:
+                case 0x2019:
+                    out.push_back('\'');
+                    break;
+
+                case 0x201C:
+                case 0x201D:
+                    break;
+
+                case 0x2026:
+                    out += "...";
+                    break;
+
+                default:
+                    if (const char rep = LatinToAscii(code)) {
+                        out.push_back(rep);
+                    } else if (code >= 0x80) {
+                        out.clear();
+                        return;
+                    }
+                    break;
+            }
+        }
+
+        pos += static_cast<size_t>(units);
+    }
+
+    CleanTitleName(out);
+    // Leave room for IDs and extensions. Do not truncate titles.
+    constexpr size_t max_component_length = 255;
+    constexpr size_t nsp_suffix_length = sizeof(NacpStruct::display_version)
+        + sizeof(" [0123456789ABCDEF][v4294967295][DLCUPD].nsp") - 1;
+    // XCI names reserve 30 bytes.
+    constexpr size_t gc_base_length = max_component_length - 30;
+    constexpr size_t gc_suffix_length = sizeof(" [0123456789ABCDEF][v4294967295]") - 1;
+    static_assert(nsp_suffix_length < max_component_length && gc_suffix_length < gc_base_length);
+    constexpr size_t max_title_length = std::min(max_component_length - nsp_suffix_length,
+                                                  gc_base_length - gc_suffix_length);
+    if (out.size() > max_title_length || !std::ranges::any_of(out, [](unsigned char c) {
+        return c != ' ' && c != '.';
+    })) out.clear();
+}
+
+// Prefer the displayed title, then the regional database.
+static std::string MakeCachedExportName(u64 app_id, std::string_view display_name) {
+    std::string out;
+    ToAscii(display_name, out);
+    if (out.empty()) ToAscii(GetRegionalTitleName(app_id), out);
+    return out;
+}
+
+// Fall back to another NACP language when needed.
+static std::string MakeExportName(u64 app_id, const NacpStruct& nacp, std::string_view display_name) {
+    const auto convert = [](std::string_view name) {
+        std::string out;
+        ToAscii(name, out);
+        return out;
+    };
+    if (auto name = MakeCachedExportName(app_id, display_name); !name.empty()) return name;
+
+    // Try NACP if the DB has no title.
+    for (const auto& entry : NacpLanguageEntries(nacp)) {
+        const std::string_view view{entry.name, strnlen(entry.name, sizeof(entry.name))};
+        if (auto name = convert(view); !name.empty()) return name;
+    }
     return {};
 }
 
-auto MakeExportTitleName(std::string_view current_name, std::string_view english_name, bool fix_name) -> std::string {
-    const auto sanitise = [](std::string_view src, bool ascii_only) -> std::string {
-        std::string name{src};
-        if (name.empty()) {
-            return {};
-        }
+std::string ResolveExportName(u64 app_id, std::string_view cached_name) {
+    if (auto name = MakeCachedExportName(app_id, cached_name); !name.empty()) return name;
 
-        utilsReplaceIllegalCharacters(name.data(), ascii_only);
-        name.resize(std::strlen(name.c_str()));
-
-        const auto usable = std::ranges::any_of(name, [](unsigned char c) {
-            return c != '_' && c != ' ' && c != '.';
-        });
-        return usable ? name : std::string{};
-    };
-
-    if (fix_name) {
-        // the english title is preferred as it's always ascii safe.
-        if (auto name = sanitise(english_name, true); !name.empty()) {
-            return name;
-        }
-
-        // the english title isn't always available (title has no english nacp
-        // entry, the control nca failed to parse, sys-tweak override, ...).
-        // fallback to the displayed name rather than losing the name entirely.
-        // if that has no ascii safe characters either, fall back to the title id.
-        return sanitise(current_name, true);
+    // Do the potentially slow control-data fallback only when exporting,
+    // never while populating the NXTC-backed game list.
+    auto nacp = std::make_unique<NacpStruct>();
+    if (R_SUCCEEDED(LoadControlNacp(app_id, *nacp, nullptr))) {
+        NormalizeNacpLangData(*nacp);
+        return MakeExportName(app_id, *nacp, {});
     }
 
-    return sanitise(current_name, false);
+    // Preserve the old NS Storage fallback for titles without a readable NCA.
+    auto control = std::make_unique<NsApplicationControlData>();
+    u64 actual_size{};
+    if (R_SUCCEEDED(nsGetApplicationControlData(
+        NsApplicationControlSource_Storage, app_id,
+        control.get(), sizeof(NsApplicationControlData), &actual_size
+    )) && actual_size >= sizeof(NacpStruct) && actual_size <= sizeof(*control)) {
+        NormalizeNacpLangData(control->nacp);
+        return MakeExportName(app_id, control->nacp, {});
+    }
+    return {};
 }
 
 // taken from nxdumptool.

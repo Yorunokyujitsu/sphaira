@@ -29,7 +29,7 @@ struct ContentEntry {
 
 struct Entry final : game::Entry {
     std::string name{};
-    std::string export_name{};
+    bool export_name_resolved{};
     std::vector<ContentEntry> contents{};
 };
 
@@ -161,6 +161,12 @@ game::NspEntry* Device::FindNspFromEntry(Entry& entry, u64 id) const {
     if (R_FAILED(LoadMetaEntries(entry))) {
         log_write("[GAME] failed to load meta entries for app id: %016lx\n", entry.app_id);
         return nullptr;
+    }
+
+    // Resolve the export name once per title.
+    if (!entry.export_name_resolved) {
+        entry.export_name = title::ResolveExportName(entry.app_id, entry.export_name);
+        entry.export_name_resolved = true;
     }
 
     // try and find the matching nsp entry.
@@ -384,19 +390,14 @@ int Device::devoptab_dirnext(void* fd, char *filename, struct stat *filestat) {
             // this will never be null as it blocks until a valid entry is loaded.
             auto result = title::Get(entry.app_id);
             entry.lang = result->lang;
+            entry.export_name = result->export_name;
             entry.status = result->status;
 
             char name[NAME_MAX]{};
             if (result->status == title::NacpLoadStatus::Loaded) {
-                const auto fix_filenames = App::GetApp()->m_dump_fix_filenames.Get();
-                const auto english_name = fix_filenames ? title::GetEnglishTitleName(entry.app_id) : std::string{};
-                entry.export_name = title::MakeExportTitleName(result->lang.name, english_name, fix_filenames);
-
                 // the listed folder keeps the real (localised) title, only the exported
-                // nsp filenames follow the "fix export filenames" option.
-                const auto display_name = TruncateUtf8(
-                    title::MakeExportTitleName(result->lang.name, {}, false), sizeof(name) - 33
-                );
+                // nsp filenames use the resolved export title.
+                const auto display_name = TruncateUtf8(result->current_name, sizeof(name) - 33);
 
                 if (display_name.empty()) {
                     std::snprintf(name, sizeof(name), "[%016lX]", entry.app_id);

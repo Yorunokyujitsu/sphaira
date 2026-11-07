@@ -30,6 +30,7 @@
 #include <utility>
 #include <cstring>
 #include <algorithm>
+#include <unordered_map>
 #include <minIni.h>
 #include <minizip/unzip.h>
 #include <minizip/zip.h>
@@ -275,7 +276,7 @@ void LoadResultIntoEntry(Entry& e, title::ThreadResultData* result) {
     if (result) {
         e.status = result->status;
         e.lang = result->lang;
-        e.status = result->status;
+        e.export_name = result->export_name;
     }
 }
 
@@ -294,22 +295,40 @@ void LoadControlEntry(Entry& e, bool force_image_load = false) {
 }
 
 auto BuildSaveName(const Entry& e) -> fs::FsPath {
-    fs::FsPath name_buf = e.GetName();
-    title::utilsReplaceIllegalCharacters(name_buf, true);
-    return name_buf;
+    return title::ResolveExportName(e.application_id, e.export_name);
 }
 
-auto BuildSaveBasePath(const Entry& e, const fs::FsPath& root, bool force_id_path = false) -> fs::FsPath {
+auto BuildSaveTitleIdName(const fs::FsPath& export_name, u64 app_id) -> fs::FsPath {
+    fs::FsPath name;
+    if (export_name.empty()) {
+        std::snprintf(name, sizeof(name), "%016lX", app_id);
+        return name;
+    }
+
+    // Use the ID if the title is too long.
+    constexpr size_t suffix_length = sizeof(" [0123456789ABCDEF]") - 1;
+    constexpr size_t max_title_length = std::min<size_t>(255, sizeof(fs::FsPath) - 1) - suffix_length;
+    if (export_name.size() > max_title_length) {
+        std::snprintf(name, sizeof(name), "%016lX", app_id);
+    } else {
+        std::snprintf(name, sizeof(name), "%s [%016lX]", export_name.s, app_id);
+    }
+    return name;
+}
+
+auto BuildSaveBasePath(const Entry& e, bool force_id_path = false, const fs::FsPath* cached_name = nullptr) -> fs::FsPath {
     fs::FsPath name;
     if (e.save_data_type == FsSaveDataType_System || e.save_data_type == FsSaveDataType_SystemBcat) {
         std::snprintf(name, sizeof(name), "%016lX", e.system_save_data_id);
     } else if (force_id_path || !strcasecmp(e.GetName(), "corrupted")) {
         std::snprintf(name, sizeof(name), "%016lX", e.application_id);
     } else {
-        name = BuildSaveName(e);
+        const auto export_name = cached_name ? *cached_name : BuildSaveName(e);
+        name = BuildSaveTitleIdName(export_name, e.application_id);
     }
 
-    return fs::AppendPath(fs::AppendPath(root, GetSaveFolder(e)), name);
+    const auto dump_path = App::GetApp()->m_dump_path.Get();
+    return fs::AppendPath(fs::AppendPath(dump_path, GetSaveFolder(e)), name);
 }
 
 void FreeEntry(NVGcontext* vg, Entry& e) {
@@ -787,16 +806,43 @@ void Menu::RestoreSave() {
         const auto& entry = m_entries[m_index];
         const fs::FsPath dump_root = App::GetApp()->m_dump_path.Get();
         std::vector<fs::FsPath> candidates;
-        for (const fs::FsPath& root : {dump_root, fs::FsPath{App::DEFAULT_DUMP_PATH}}) {
-            for (bool by_id : {false, true}) {
-                const auto relative = BuildSaveBasePath(entry, root, by_id);
-                if (mount.size() + relative.size() >= PATH_MAX) {
-                    App::PushErrorBox(Result_FsNewPathTooLarge, "Restore"_i18n);
-                    return;
-                }
-                const auto path = fs::AppendPath(mount, relative);
+        const bool system = entry.save_data_type == FsSaveDataType_System || entry.save_data_type == FsSaveDataType_SystemBcat;
+        const auto export_name = system ? fs::FsPath{} : BuildSaveName(entry);
+        const auto folder = BuildSaveTitleIdName(export_name, system ? entry.system_save_data_id : entry.application_id);
+        char id[17];
+        std::snprintf(id, sizeof(id), "%016lX", system ? entry.system_save_data_id : entry.application_id);
+        const auto suffix = std::string{" ["} + id + "]";
+        fs::FsPath legacy_name{entry.GetName()};
+        title::utilsReplaceIllegalCharacters(legacy_name, true);
+
+        for (const auto& root : {dump_root, fs::FsPath{App::DEFAULT_DUMP_PATH}}) {
+            if (!candidates.empty() && root == dump_root) continue;
+            const auto relative = fs::AppendPath(root, GetSaveFolder(entry));
+            if (mount.size() + relative.size() >= PATH_MAX) {
+                App::PushErrorBox(Result_FsNewPathTooLarge, "Restore"_i18n);
+                return;
+            }
+            const auto base = fs::AppendPath(mount, relative);
+            const auto add = [&](std::string_view name) {
+                if (name.empty() || base.size() + 1 + name.size() >= PATH_MAX) return;
+                const auto path = fs::AppendPath(base, name);
                 if (std::find(candidates.begin(), candidates.end(), path) == candidates.end()) {
                     candidates.push_back(path);
+                }
+            };
+            add(folder);
+            add(id);
+            if (!system) {
+                add(legacy_name);
+                const std::string_view current{folder};
+                if (current.ends_with(suffix)) add(current.substr(0, current.size() - suffix.size()));
+                // Find backups created under an earlier title for this ID.
+                filebrowser::FsDirCollection dirs;
+                if (R_SUCCEEDED(filebrowser::FsView::get_collection(fs.get(), base, "", dirs, false, true, false))) {
+                    for (const auto& dir : dirs.dirs) {
+                        const std::string_view name{dir.name};
+                        if (name.ends_with(suffix) && swkbd::IsSafeName(name)) add(name);
+                    }
                 }
             }
         }
@@ -824,9 +870,28 @@ void Menu::RestoreSave() {
             }
         }
 
+        // Show the parent folder only when multiple backups have the same name.
+        if (dump_root == App::DEFAULT_DUMP_PATH) {
+            std::unordered_map<std::string, size_t> counts;
+            for (const auto& item : items) ++counts[item];
+            for (size_t i = 0; i < items.size(); ++i) {
+                if (counts[items[i]] > 1) {
+                    const auto path = paths[i].toString();
+                    const auto last = path.find_last_of('/');
+                    if (last == std::string::npos) {
+                        items[i] = path;
+                    } else {
+                        const auto parent = path.substr(0, last);
+                        const auto first = parent.find_last_of('/');
+                        items[i] += " (" + parent.substr(first == std::string::npos ? 0 : first + 1) + ")";
+                    }
+                }
+            }
+        }
+
         if (paths.empty()) {
             App::Push<ui::OptionBox>(
-                i18n::Reorder("No saves found in ", candidates.front().toString()),
+                i18n::Reorder("No saves found in ", (candidates.empty() ? dump_root : candidates.front()).toString()),
                 "OK"_i18n
             );
             return;
@@ -875,7 +940,7 @@ void Menu::RestoreSave() {
 Result Menu::BuildSavePath(const Entry& e, u32 flags, fs::FsPath& path) const {
     const auto t = std::time(NULL);
     const auto tm = std::localtime(&t);
-    const auto base = BuildSaveBasePath(e, App::GetApp()->m_dump_path.Get());
+    const auto base = BuildSaveBasePath(e);
 
     char time[64];
     std::snprintf(time, sizeof(time), "%u.%02u.%02u @ %02u.%02u.%02u", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
@@ -1012,6 +1077,14 @@ Result Menu::RestoreSaveInternal(ProgressBox* pbox, const Entry& e, const fs::Fs
     }
 
     if (meta.has_value()) {
+        // Refuse backups from a different title before resizing or erasing the
+        // destination save. Older archives with no metadata remain supported.
+        const bool system = e.save_data_type == FsSaveDataType_System || e.save_data_type == FsSaveDataType_SystemBcat;
+        if (system ? meta->attr.system_save_data_id != e.system_save_data_id : meta->attr.application_id != e.application_id) {
+            log_write("[SAVE] backup title ID does not match restore target\n");
+            R_THROW(Result_SaveInvalidArchiveLayout);
+        }
+
         // extending to a size that is not larger than the current one fails with FsError_InvalidSize.
         const auto data_size = std::max<s64>(meta->data_size, extra.data_size);
         const auto journal_size = std::max<s64>(meta->journal_size, extra.journal_size);

@@ -47,6 +47,8 @@ struct ThreadResultData {
     u64 id{};
     std::vector<u8> icon;
     NacpLanguageEntry lang{};
+    std::string current_name{};
+    std::string export_name{};
     // NacpStruct::supported_language_flag, 0 = unknown.
     u32 supported_language_flag{};
     NacpLoadStatus status{NacpLoadStatus::None};
@@ -91,9 +93,8 @@ Result GetControlPathFromStatus(const NsApplicationContentMetaStatus& status, u6
 // caller that doesn't hold title::Init.
 Result GetControlPath(NcmContentMetaDatabase* db, NcmContentStorage* cs, u64 id, u64* out_program_id, fs::FsPath* out_path);
 
-auto GetEnglishTitleName(u64 app_id) -> std::string;
-
-auto MakeExportTitleName(std::string_view current_name, std::string_view english_name, bool fix_name) -> std::string;
+// Prefer the displayed title, then the regional DB or NACP.
+std::string ResolveExportName(u64 app_id, std::string_view cached_name);
 
 // taken from nxdumptool.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);

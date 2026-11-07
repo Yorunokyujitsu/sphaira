@@ -112,11 +112,14 @@ auto GetDumpTypeStr(u8 type) -> const char* {
     return "";
 }
 
-auto BuildXciName(const ApplicationEntry& e, std::string& title_name) -> fs::FsPath {
-    title_name = title::MakeExportTitleName(
-        e.lang_entry.name, e.english_name, App::GetApp()->m_dump_fix_filenames.Get()
-    );
+void ResolveXciExportNames(std::span<ApplicationEntry> entries) {
+    for (auto& entry : entries) {
+        entry.export_name = title::ResolveExportName(entry.app_id, entry.export_name);
+    }
+}
 
+auto BuildXciName(const ApplicationEntry& e, std::string& title_name) -> fs::FsPath {
+    title_name = e.export_name;
     fs::FsPath path;
     if (title_name.empty()) {
         char id[17];
@@ -1094,7 +1097,7 @@ Result Menu::LoadControlData(ApplicationEntry& e) {
 
     e.icon = data->icon;
     e.lang_entry = data->lang;
-    e.english_name = title::GetEnglishTitleName(e.app_id);
+    e.export_name = data->export_name;
     R_SUCCEED();
 }
 
@@ -1122,6 +1125,7 @@ void Menu::OnChangeIndex(s64 new_index) {
 #ifdef ENABLE_NSZ
 Result Menu::DumpXcz(u32 flags) {
     R_TRY(GcMountStorage());
+    ResolveXciExportNames(m_entries);
 
     auto source = std::make_shared<XciSource>();
     source->menu = this;
@@ -1156,6 +1160,8 @@ Result Menu::DumpGames(u32 flags) {
         flags &= ~DumpFileFlag_Initial;
         R_UNLESS(flags, Result_GcNoInitialData);
     }
+
+    ResolveXciExportNames(m_entries);
 
     const auto do_dump = [this](u32 flags) -> Result {
         App::SetBoostMode(true);

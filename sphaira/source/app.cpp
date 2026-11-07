@@ -1761,7 +1761,6 @@ App::App(const char* argv0) {
             if (app->m_text_scroll_speed.LoadFrom(Key, Value)) {}
         } else if (!std::strcmp(Section, "dump")) {
             if (app->m_dump_path.LoadFrom(Key, Value)) {}
-            else if (app->m_dump_fix_filenames.LoadFrom(Key, Value)) {}
             else if (app->m_dump_app_folder.LoadFrom(Key, Value)) {}
             else if (app->m_dump_append_folder_with_xci.LoadFrom(Key, Value)) {}
             else if (app->m_dump_trim_xci.LoadFrom(Key, Value)) {}
@@ -2531,22 +2530,6 @@ void App::DisplayDumpOptions(bool left_side) {
         nsz_block_items.emplace_back(i18n::get(e.name));
     }
 
-    options->Add<ui::SidebarEntryBool>(
-        "Fix export filenames"_i18n, App::GetApp()->m_dump_fix_filenames,
-        i18n::get("fix_export_filenames_info",
-            "Uses the English title for export filenames and falls back to the Title ID when unavailable. "
-            "Disable this to preserve localized and Unicode titles on destinations that support them."
-        )
-    );
-    options->Add<ui::SidebarEntryBool>(
-        "Created nested folder"_i18n, App::GetApp()->m_dump_app_folder,
-        i18n::get("game_folder_info",
-            "Creates a folder using the name of the game.\n"
-            "For example, /name/name.xci\n"
-            "Disabling this would use /name.xci"
-        )
-    );
-
     auto dump_path_entry = options->Add<ui::SidebarEntryTextBase>(
         "Export path"_i18n, "sdmc:" + App::GetApp()->m_dump_path.Get(), nullptr,
         i18n::get("dump_path_info",
@@ -2570,6 +2553,14 @@ void App::DisplayDumpOptions(bool left_side) {
         }
     });
 
+    options->Add<ui::SidebarEntryBool>(
+        "Created nested folder"_i18n, App::GetApp()->m_dump_app_folder,
+        i18n::get("game_folder_info",
+            "Creates a folder using the name of the game.\n"
+            "For example, /name/name.xci\n"
+            "Disabling this would use /name.xci"
+        )
+    );
     options->Add<ui::SidebarEntryBool>(
         "Append folder with .xci"_i18n, App::GetApp()->m_dump_append_folder_with_xci,
         i18n::get("xci_folder_info",

@@ -187,6 +187,7 @@ bool LoadControlImage(Entry& e, title::ThreadResultData* result) {
 
 void LoadResultIntoEntry(Entry& e, title::ThreadResultData* result) {
     if (result) {
+        e.export_name = result->export_name;
         e.status = result->status;
         e.lang = result->lang;
         e.supported_language_flag = result->supported_language_flag;
@@ -1898,8 +1899,8 @@ auto BuildNspPath(const Entry& e, std::string_view export_name, const NsApplicat
         u64 program_id;
         fs::FsPath path;
         if (R_SUCCEEDED(title::GetControlPathFromStatus(status, &program_id, &path))) {
-            char display_version[0x10];
-            if (R_SUCCEEDED(nca::ParseControl(path, program_id, display_version, sizeof(display_version), nullptr, offsetof(NacpStruct, display_version)))) {
+            char display_version[sizeof(NacpStruct::display_version) + 1]{};
+            if (R_SUCCEEDED(nca::ParseControl(path, program_id, display_version, sizeof(display_version) - 1, nullptr, offsetof(NacpStruct, display_version)))) {
                 std::snprintf(version, sizeof(version), "%s ", display_version);
             }
         }
@@ -2018,9 +2019,7 @@ Result BuildNspEntry(const Entry& e, std::string_view export_name, const Content
 Result BuildNspEntries(Entry& e, const title::MetaEntries& meta_entries, std::vector<NspEntry>& out, bool to_nsz) {
     LoadControlEntry(e);
 
-    const auto fix_filenames = App::GetApp()->m_dump_fix_filenames.Get();
-    const auto english_name = fix_filenames ? title::GetEnglishTitleName(e.app_id) : std::string{};
-    const auto export_name = title::MakeExportTitleName(e.GetName(), english_name, fix_filenames);
+    const auto export_name = title::ResolveExportName(e.app_id, e.export_name);
 
     keys::Keys keys;
     R_TRY(keys::parse_keys(keys, true));

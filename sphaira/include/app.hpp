@@ -359,7 +359,6 @@ public:
 
     // dump options
     option::OptionString m_dump_path{"dump", "path", DEFAULT_DUMP_PATH};
-    option::OptionBool m_dump_fix_filenames{"dump", "fix_filenames", true};
     option::OptionBool m_dump_app_folder{"dump", "app_folder", true};
     option::OptionBool m_dump_append_folder_with_xci{"dump", "append_folder_with_xci", true};
     option::OptionBool m_dump_trim_xci{"dump", "trim_xci", false};
